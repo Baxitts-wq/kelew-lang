@@ -66,6 +66,7 @@ impl Lexer {
             }
             '(' => Ok(Some(self.make_token(TokenType::LeftParen))),
             ')' => Ok(Some(self.make_token(TokenType::RightParen))),
+            ',' => Ok(Some(self.make_token(TokenType::Comma))),
             '+' => Ok(Some(self.make_token(TokenType::Plus))),
             '-' => Ok(Some(self.make_token(TokenType::Minus))),
             '*' => Ok(Some(self.make_token(TokenType::Star))),

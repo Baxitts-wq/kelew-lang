@@ -55,6 +55,11 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    Call {
+        callee: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -65,6 +70,7 @@ impl Expr {
             Expr::Input(span) => *span,
             Expr::Binary { span, .. } => *span,
             Expr::Grouping { span, .. } => *span,
+            Expr::Call { span, .. } => *span,
         }
     }
 }

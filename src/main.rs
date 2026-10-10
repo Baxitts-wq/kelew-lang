@@ -1,9 +1,11 @@
 pub mod ast;
+pub mod bundler;
 pub mod compiler;
 pub mod disassembler;
 pub mod lexer;
 pub mod opcode;
 pub mod parser;
+pub mod stdlib;
 pub mod token;
 pub mod vm;
 
@@ -32,11 +34,12 @@ fn print_banner() {
 fn print_help() {
     print_banner();
     println!("USAGE:");
-    println!("  kelew run <fichier.klw> [--trace]   Execute bytecode on stack VM");
-    println!("  kelew disasm <fichier.klw>          Disassemble bytecode chunk");
-    println!("  kelew check <fichier.klw>           Lexical and syntactic verification");
-    println!("  kelew repl                          Interactive REPL");
-    println!("  kelew demo                          Run demo script");
+    println!("  kelew run <fichier.klw> [--trace]     Execute bytecode on stack VM");
+    println!("  kelew build <fichier.klw> [-o <out>]  Build standalone native executable binary (.exe)");
+    println!("  kelew disasm <fichier.klw>            Disassemble bytecode chunk");
+    println!("  kelew check <fichier.klw>             Lexical and syntactic verification");
+    println!("  kelew repl                            Interactive REPL");
+    println!("  kelew demo                            Run demo script");
     println!();
 }
 
@@ -185,6 +188,15 @@ fn run_demo() {
 }
 
 fn main() {
+    // 1. Détection de binaire autonome : si le .exe contient du bytecode embarqué, on l'exécute directement
+    if let Some(embedded_chunk) = bundler::Bundler::extract_embedded_bytecode() {
+        let mut vm = VM::new();
+        match vm.interpret(embedded_chunk) {
+            InterpretResult::Ok => std::process::exit(0),
+            _ => std::process::exit(1),
+        }
+    }
+
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -193,6 +205,25 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "build" => {
+            if args.len() < 3 {
+                eprintln!("Usage: kelew build <fichier.klw> [-o <sortie.exe>]");
+                return;
+            }
+            let source = &args[2];
+            let output = if args.len() >= 5 && args[3] == "-o" {
+                args[4].clone()
+            } else {
+                let p = std::path::Path::new(source);
+                let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
+                format!("{}.exe", stem)
+            };
+
+            match bundler::Bundler::build_executable(source, &output) {
+                Ok(_) => println!("[ok] Executable natif autonome genere : {}", output),
+                Err(e) => eprintln!("Erreur de generation : {}", e),
+            }
+        }
         "run" => {
             if args.len() < 3 {
                 eprintln!("Usage: kelew run <fichier.klw> [--trace]");

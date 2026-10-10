@@ -132,6 +132,13 @@ impl Compiler {
             Expr::Grouping { expr, .. } => {
                 self.compile_expr(expr)?;
             }
+            Expr::Call { callee, args, span } => {
+                for arg in args {
+                    self.compile_expr(arg)?;
+                }
+                let name_idx = self.chunk.add_constant(Value::String(callee.clone()));
+                self.chunk.write_op(OpCode::OpCall(name_idx, args.len()), span.line);
+            }
             Expr::Binary { left, op, right, span } => {
                 self.compile_expr(left)?;
                 self.compile_expr(right)?;

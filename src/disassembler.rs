@@ -83,6 +83,10 @@ impl<'a> Disassembler<'a> {
                 let name = &self.chunk.constants[*idx];
                 println!("{:<18} #{:<4} (Jib -> {})", "OP_INPUT", idx, name);
             }
+            OpCode::OpCall(name_idx, argc) => {
+                let name = &self.chunk.constants[*name_idx];
+                println!("{:<18} #{:<4} ({} avec {} args)", "OP_CALL", name_idx, name, argc);
+            }
             OpCode::OpHalt => println!("{:<18} (Baraka/FioDelPuta)", "OP_HALT"),
         }
 

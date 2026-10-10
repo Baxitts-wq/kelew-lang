@@ -274,7 +274,24 @@ impl Parser {
             TokenType::String(s) => Ok(Expr::Literal(Value::String(s), token.span)),
             TokenType::Sah => Ok(Expr::Literal(Value::Bool(true), token.span)),
             TokenType::K7hba => Ok(Expr::Literal(Value::Bool(false), token.span)),
-            TokenType::Identifier(id) => Ok(Expr::Variable(id, token.span)),
+            TokenType::Identifier(id) => {
+                let span = token.span;
+                if self.match_token(&[TokenType::LeftParen]) {
+                    let mut args = Vec::new();
+                    if !self.check(&TokenType::RightParen) {
+                        loop {
+                            args.push(self.expression()?);
+                            if !self.match_token(&[TokenType::Comma]) {
+                                break;
+                            }
+                        }
+                    }
+                    self.consume(&TokenType::RightParen, "Parenthèse fermante ')' attendue après les arguments")?;
+                    Ok(Expr::Call { callee: id, args, span })
+                } else {
+                    Ok(Expr::Variable(id, span))
+                }
+            }
             TokenType::Jib => Ok(Expr::Input(token.span)),
             TokenType::LeftParen => {
                 let expr = self.expression()?;

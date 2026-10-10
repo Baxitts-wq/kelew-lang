@@ -34,6 +34,14 @@ impl VM {
         self.trace_execution = trace;
     }
 
+    pub fn get_globals(&self) -> &HashMap<String, Value> {
+        &self.globals
+    }
+
+    pub fn get_globals_mut(&mut self) -> &mut HashMap<String, Value> {
+        &mut self.globals
+    }
+
     pub fn interpret(&mut self, chunk: Chunk) -> InterpretResult {
         self.chunk = chunk;
         self.ip = 0;
@@ -265,6 +273,25 @@ impl VM {
                             Value::String(trim.to_string())
                         };
                         self.globals.insert(name, val);
+                    }
+                }
+                OpCode::OpCall(name_idx, argc) => {
+                    let name = match &self.chunk.constants[name_idx] {
+                        Value::String(s) => s.clone(),
+                        _ => unreachable!(),
+                    };
+                    let mut args = Vec::with_capacity(argc);
+                    for _ in 0..argc {
+                        args.push(self.pop());
+                    }
+                    args.reverse();
+
+                    match crate::stdlib::StdLib::call(&name, &args) {
+                        Ok(result) => self.push(result),
+                        Err(e) => {
+                            eprintln!("[Erreur Native Kelew] {}", e);
+                            return InterpretResult::RuntimeError;
+                        }
                     }
                 }
                 OpCode::OpHalt => {

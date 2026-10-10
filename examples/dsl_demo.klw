@@ -1,0 +1,31 @@
+T3boun dymek
+
+# 1. Test du Système de Fichiers
+Ejacule "--- Test 1 : Ecriture et Lecture de Fichier ---"
+Kelew chemin = "test_io.txt"
+Kelew message = "Donnees generees par Kelew VM."
+EcrireFichier(chemin, message)
+
+Kelew contenu = LireFichier(chemin)
+Ejacule "Contenu lu depuis le disque :"
+Ejacule contenu
+
+SupprimerFichier(chemin)
+Ejacule "Fichier nettoye avec succes."
+
+# 2. Test du Réseau / HTTP
+Ejacule "--- Test 2 : Requete HTTP GET ---"
+Kelew reponse = HttpGet("https://httpbin.org/get")
+Ejacule "Taille de la reponse HTTP :"
+Ejacule Longueur(reponse)
+
+# 3. Test du Temps et de l'Horloge Système
+Ejacule "--- Test 3 : Horloge Unix ---"
+Kelew t1 = TempsMs()
+Dormir(50)
+Kelew t2 = TempsMs()
+Ejacule "Temps ecoule (ms) :"
+Ejacule t2 - t1
+
+Ejacule "Tous les tests DSL sont termines avec succes."
+Fio Del puta
