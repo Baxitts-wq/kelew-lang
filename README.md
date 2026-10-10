@@ -172,7 +172,24 @@ Kelew features an integrated visual diagnostic reporting engine providing precis
   |
 ```
 
-Line numbers are preserved through opcode emissions into the VM instruction stream, ensuring that runtime evaluation exceptions also indicate the exact source line where the fault occurred.
+### Multi-File Runtime Error Resolution & Call Stack Trace
+
+Each bytecode opcode embeds both its line and its source file identifier (`file_id`). When a runtime exception occurs across imported modules or nested function invocations, the virtual machine reconstructs the full hierarchical call stack:
+
+```text
+[Erreur Runtime VM]
+  Message: Soustraction requiert deux nombres: 'texte' et '5'
+  Emplacement: maths.klw:3
+  Trace de pile (Call Stack Trace):
+    --> maths.klw:3 dans crash_deep()
+    --> algebra.klw:8 dans compute()
+    --> main.klw:12 dans <script>()
+[Erreur Runtime] Soustraction requiert deux nombres: 'texte' et '5' dans maths.klw:3:1
+  |
+  3 | Kelew invalid = "texte" - 5
+    | ^--- Soustraction requiert deux nombres: 'texte' et '5'
+  |
+```
 
 ## Intelligence and Standard Library
 

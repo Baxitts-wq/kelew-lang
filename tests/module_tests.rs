@@ -226,3 +226,118 @@ fn test_visual_diagnostics_formatting() {
     assert!(diag.contains("2 | Jibou \"introuvable.klw\""));
     assert!(diag.contains("^---"));
 }
+
+#[test]
+fn test_indirect_circular_dependency() {
+    let dir = create_temp_test_dir("indirect_cycle");
+
+    let file_a = dir.join("mod_a.klw");
+    let file_b = dir.join("mod_b.klw");
+    let file_c = dir.join("mod_c.klw");
+
+    fs::write(&file_a, "Jibou \"mod_b.klw\"\nKelew a = 1\n").unwrap();
+    fs::write(&file_b, "Jibou \"mod_c.klw\"\nKelew b = 2\n").unwrap();
+    fs::write(&file_c, "Jibou \"mod_a.klw\"\nKelew c = 3\n").unwrap();
+
+    let main_code = r#"
+        T3boun dymek
+        Jibou "mod_a.klw"
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_base_dir(dir.clone());
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_err());
+    let err = eval_res.err().unwrap();
+    assert!(
+        err.contains("Dependance circulaire") || err.contains("circulaire"),
+        "Unexpected error: {}",
+        err
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_nested_relative_paths() {
+    let dir = create_temp_test_dir("rel_paths");
+    let sub1 = dir.join("sub1");
+    let sub2 = dir.join("sub2");
+    fs::create_dir_all(&sub1).unwrap();
+    fs::create_dir_all(&sub2).unwrap();
+
+    let mod2_file = sub2.join("mod2.klw");
+    fs::write(
+        &mod2_file,
+        r#"
+        khedma get_value()
+            raja3 88
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let mod1_file = sub1.join("mod1.klw");
+    fs::write(
+        &mod1_file,
+        r#"
+        Jibou "../sub2/mod2.klw"
+
+        khedma compute()
+            raja3 get_value() + 12
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let main_code = r#"
+        T3boun dymek
+        Jibou "sub1/mod1.klw"
+
+        Kelew total = compute()
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_base_dir(dir.clone());
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_ok(), "Eval failed: {:?}", eval_res.err());
+    assert_eq!(engine.get_global("total"), Some(&Value::Number(100.0)));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_runtime_call_stack_trace_and_file_localization() {
+    let dir = create_temp_test_dir("stack_trace");
+
+    let sub_module = dir.join("faulty.klw");
+    fs::write(
+        &sub_module,
+        r#"
+        khedma crash_deep()
+            Kelew invalid = "texte" - 5
+            raja3 invalid
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let main_code = r#"
+        T3boun dymek
+        Jibou "faulty.klw"
+
+        khedma caller()
+            crash_deep()
+        Baraka
+
+        caller()
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_source_file(dir.clone(), "main.klw");
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+

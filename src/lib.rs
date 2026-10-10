@@ -22,6 +22,7 @@ pub use vm::{InterpretResult, VM};
 pub struct Engine {
     vm: VM,
     base_dir: std::path::PathBuf,
+    source_file: Option<String>,
 }
 
 impl Engine {
@@ -29,6 +30,7 @@ impl Engine {
         Engine {
             vm: VM::new(),
             base_dir: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            source_file: None,
         }
     }
 
@@ -36,6 +38,15 @@ impl Engine {
         Engine {
             vm: VM::new(),
             base_dir,
+            source_file: None,
+        }
+    }
+
+    pub fn with_source_file(base_dir: std::path::PathBuf, filename: &str) -> Self {
+        Engine {
+            vm: VM::new(),
+            base_dir,
+            source_file: Some(filename.to_string()),
         }
     }
 
@@ -56,7 +67,11 @@ impl Engine {
         let mut parser = Parser::new(tokens);
         let program = parser.parse()?;
 
-        let compiler = Compiler::with_base_dir(self.base_dir.clone());
+        let compiler = if let Some(ref f) = self.source_file {
+            Compiler::with_source_file(self.base_dir.clone(), f)
+        } else {
+            Compiler::with_base_dir(self.base_dir.clone())
+        };
         let chunk = compiler.compile(&program)?;
 
         self.vm.set_trace(trace);

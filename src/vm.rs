@@ -11,12 +11,20 @@ pub enum InterpretResult {
     RuntimeError,
 }
 
+#[derive(Debug, Clone)]
+pub struct CallFrame {
+    pub function_name: String,
+    pub file: String,
+    pub line: usize,
+}
+
 pub struct VM {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
     trace_execution: bool,
+    frames: Vec<CallFrame>,
 }
 
 impl VM {
@@ -27,6 +35,7 @@ impl VM {
             stack: Vec::with_capacity(256),
             globals: HashMap::new(),
             trace_execution: false,
+            frames: Vec::new(),
         }
     }
 
@@ -46,6 +55,19 @@ impl VM {
         self.chunk = chunk;
         self.ip = 0;
         self.stack.clear();
+        self.frames.clear();
+
+        let initial_file = self
+            .chunk
+            .files
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "<source>".to_string());
+        self.frames.push(CallFrame {
+            function_name: "<script>".to_string(),
+            file: initial_file,
+            line: 1,
+        });
 
         self.run()
     }
@@ -289,6 +311,25 @@ impl VM {
                             ));
                         }
 
+                        let (caller_file, caller_line) = self.chunk.get_location(self.ip - 1);
+                        let mut sub_frames = self.frames.clone();
+                        if let Some(top) = sub_frames.last_mut() {
+                            top.file = caller_file.to_string();
+                            top.line = caller_line;
+                        }
+
+                        let fn_file = user_fn
+                            .chunk
+                            .files
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| caller_file.to_string());
+                        sub_frames.push(CallFrame {
+                            function_name: name.clone(),
+                            file: fn_file,
+                            line: caller_line,
+                        });
+
                         let mut sub_globals = self.globals.clone();
                         for (param, arg) in user_fn.params.iter().zip(args.into_iter()) {
                             sub_globals.insert(param.clone(), arg);
@@ -300,6 +341,7 @@ impl VM {
                             stack: Vec::with_capacity(64),
                             globals: sub_globals,
                             trace_execution: self.trace_execution,
+                            frames: sub_frames,
                         };
 
                         let status = sub_vm.run();
@@ -464,16 +506,34 @@ impl VM {
     }
 
     fn runtime_error(&self, message: &str) -> InterpretResult {
-        let line = if self.ip > 0 && self.ip - 1 < self.chunk.lines.len() {
-            self.chunk.lines[self.ip - 1]
+        let (file, line) = if self.ip > 0 && self.ip - 1 < self.chunk.code.len() {
+            self.chunk.get_location(self.ip - 1)
         } else {
-            0
+            ("<source>", 0)
         };
-        if line > 0 {
-            eprintln!("[Erreur Runtime VM à la ligne {}] {}", line, message);
-        } else {
-            eprintln!("[Erreur Runtime VM] {}", message);
+
+        eprintln!("[Erreur Runtime VM]");
+        eprintln!("  Message: {}", message);
+        eprintln!("  Emplacement: {}:{}", file, line);
+
+        eprintln!("  Trace de pile (Call Stack Trace):");
+        let current_fn = self.frames.last().map(|f| f.function_name.as_str()).unwrap_or("<script>");
+        eprintln!("    --> {}:{} dans {}()", file, line, current_fn);
+        for frame in self.frames.iter().rev().skip(1) {
+            eprintln!("    --> {}:{} dans {}()", frame.file, frame.line, frame.function_name);
         }
+
+        if let Ok(source) = std::fs::read_to_string(file) {
+            let diag = crate::diagnostic::Diagnostic::format(
+                Some(file),
+                &source,
+                crate::token::Span::new(line, 1),
+                "Runtime",
+                message,
+            );
+            eprintln!("{}", diag);
+        }
+
         InterpretResult::RuntimeError
     }
 }

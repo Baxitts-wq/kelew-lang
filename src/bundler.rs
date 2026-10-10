@@ -29,7 +29,7 @@ impl Bundler {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("."));
-        let compiler = Compiler::with_base_dir(base_dir);
+        let compiler = Compiler::with_source_file(base_dir, source_path);
         let chunk = compiler.compile(&program)?;
 
         let chunk_bytes = chunk.to_bytes();

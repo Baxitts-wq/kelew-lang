@@ -65,7 +65,11 @@ fn execute_source(
     let base_path = base_dir.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     });
-    let compiler = Compiler::with_base_dir(base_path);
+    let compiler = if let Some(f) = filename {
+        Compiler::with_source_file(base_path, f)
+    } else {
+        Compiler::with_base_dir(base_path)
+    };
     let chunk = compiler
         .compile(&program)
         .map_err(|e| Diagnostic::format_error(filename, source, "Compilation", &e))?;
@@ -97,7 +101,7 @@ fn disassemble_source(
     let base_path = base_dir.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     });
-    let compiler = Compiler::with_base_dir(base_path);
+    let compiler = Compiler::with_source_file(base_path, filename);
     let chunk = compiler
         .compile(&program)
         .map_err(|e| Diagnostic::format_error(Some(filename), source, "Compilation", &e))?;
@@ -127,7 +131,11 @@ fn check_source(
     let base_path = base_dir.unwrap_or_else(|| {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     });
-    let compiler = Compiler::with_base_dir(base_path);
+    let compiler = if let Some(f) = filename {
+        Compiler::with_source_file(base_path, f)
+    } else {
+        Compiler::with_base_dir(base_path)
+    };
     let chunk = compiler
         .compile(&program)
         .map_err(|e| Diagnostic::format_error(filename, source, "Compilation", &e))?;

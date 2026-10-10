@@ -55,6 +55,8 @@ pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
     pub lines: Vec<usize>,
+    pub file_ids: Vec<usize>,
+    pub files: Vec<String>,
 }
 
 impl Chunk {
@@ -63,14 +65,38 @@ impl Chunk {
             code: Vec::new(),
             constants: Vec::new(),
             lines: Vec::new(),
+            file_ids: Vec::new(),
+            files: vec!["<source>".to_string()],
         }
     }
 
+    pub fn add_file(&mut self, filename: &str) -> usize {
+        for (idx, f) in self.files.iter().enumerate() {
+            if f == filename {
+                return idx;
+            }
+        }
+        self.files.push(filename.to_string());
+        self.files.len() - 1
+    }
+
     pub fn write_op(&mut self, op: OpCode, line: usize) -> usize {
+        self.write_op_loc(op, 0, line)
+    }
+
+    pub fn write_op_loc(&mut self, op: OpCode, file_id: usize, line: usize) -> usize {
         let offset = self.code.len();
         self.code.push(op);
         self.lines.push(line);
+        self.file_ids.push(file_id);
         offset
+    }
+
+    pub fn get_location(&self, offset: usize) -> (&str, usize) {
+        let line = self.lines.get(offset).copied().unwrap_or(0);
+        let file_id = self.file_ids.get(offset).copied().unwrap_or(0);
+        let file = self.files.get(file_id).map(|s| s.as_str()).unwrap_or("<source>");
+        (file, line)
     }
 
     pub fn add_constant(&mut self, value: Value) -> usize {
@@ -158,13 +184,25 @@ impl Chunk {
             }
         }
 
-        // 2. Instructions (Opcodes)
+        // 2. Fichiers sources
+        let file_count = self.files.len() as u32;
+        buf.extend_from_slice(&file_count.to_le_bytes());
+        for f in &self.files {
+            let bytes = f.as_bytes();
+            buf.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            buf.extend_from_slice(bytes);
+        }
+
+        // 3. Instructions (Opcodes)
         let code_count = self.code.len() as u32;
         buf.extend_from_slice(&code_count.to_le_bytes());
 
         for (i, op) in self.code.iter().enumerate() {
             let line = (self.lines.get(i).copied().unwrap_or(0)) as u32;
             buf.extend_from_slice(&line.to_le_bytes());
+
+            let file_id = (self.file_ids.get(i).copied().unwrap_or(0)) as u32;
+            buf.extend_from_slice(&file_id.to_le_bytes());
 
             match op {
                 OpCode::OpConstant(idx) => {
@@ -350,7 +388,29 @@ impl Chunk {
             }
         }
 
-        // 2. Lire le code
+        // 2. Lire les fichiers sources
+        if cur + 4 > bytes.len() {
+            return Err("Format de bytecode tronqué (files count).".to_string());
+        }
+        let file_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+        cur += 4;
+
+        let mut files = Vec::with_capacity(file_count);
+        for _ in 0..file_count {
+            if cur + 4 > bytes.len() {
+                return Err("Format de bytecode tronqué (file len).".to_string());
+            }
+            let len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+            cur += 4;
+            if cur + len > bytes.len() {
+                return Err("Format de bytecode tronqué (file name).".to_string());
+            }
+            let f = String::from_utf8_lossy(&bytes[cur..cur + len]).to_string();
+            cur += len;
+            files.push(f);
+        }
+
+        // 3. Lire le code
         if cur + 4 > bytes.len() {
             return Err("Format de bytecode tronqué (code count).".to_string());
         }
@@ -359,14 +419,19 @@ impl Chunk {
 
         let mut code = Vec::with_capacity(code_count);
         let mut lines = Vec::with_capacity(code_count);
+        let mut file_ids = Vec::with_capacity(code_count);
 
         for _ in 0..code_count {
-            if cur + 5 > bytes.len() {
-                return Err("Format de bytecode tronqué (opcode).".to_string());
+            if cur + 9 > bytes.len() {
+                return Err("Format de bytecode tronqué (opcode header).".to_string());
             }
             let line = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
             cur += 4;
             lines.push(line);
+
+            let file_id = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+            cur += 4;
+            file_ids.push(file_id);
 
             let op_tag = bytes[cur];
             cur += 1;
@@ -457,6 +522,6 @@ impl Chunk {
             code.push(op);
         }
 
-        Ok(Chunk { code, constants, lines })
+        Ok(Chunk { code, constants, lines, file_ids, files })
     }
 }
