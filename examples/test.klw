@@ -1,0 +1,25 @@
+// Exemple de script Kelew autonome
+T3boun dymek
+
+# Calculs
+Kelew prix_unitaire = 25
+Kelew quantite = 4
+Kelew total = prix_unitaire * quantite
+
+Ejacule "Facture Kelew :"
+Ejacule total
+
+# Condition
+Zaama total > 50
+    Ejacule "Remise appliquee : Client VIP !"
+Walou
+    Ejacule "Pas de remise."
+Khalas
+
+# Test Booléen
+Kelew menteur = K7hba
+Zaama menteur == K7hba
+    Ejacule "K7hba est bien Faux (False)"
+Khalas
+
+Fio Del puta

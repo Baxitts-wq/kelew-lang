@@ -1,0 +1,41 @@
+# ==========================================================
+#  KELEW BENCHMARK & SPECIFICATION SHOWCASE
+#  Exécution sur VM à pile (Stack Machine)
+# ==========================================================
+
+T3boun dymek
+
+# 1. Variables et Arithmétique à haute précision
+Kelew base = 100
+Kelew multiplicateur = 5
+Kelew dividende = 2
+Kelew score = (base * multiplicateur) / dividende
+
+Ejacule ">>> RAPPORT DU SYSTEME KELEW <<<"
+Ejacule "Score brut calcule :"
+Ejacule score
+
+# 2. Structure Conditionnelle (Zaama / Walou / Khalas)
+Zaama score >= 200
+    Ejacule "Resultat de validation : EXCELLENT (Sah) !"
+Walou
+    Ejacule "Resultat de validation : INSUFFISANT (K7hba) !"
+Khalas
+
+# 3. Test de Booléen natif
+Kelew imposteur = K7hba
+Zaama imposteur == K7hba
+    Ejacule "Controle d'integrite : K7hba est confirme False."
+Khalas
+
+# 4. Boucle Décompte VM (Dima / Baraka)
+Ejacule ">>> DEBUT DU COMPTAGE BYTECODE <<<"
+Kelew compteur = 5
+Dima compteur > 0
+    Ejacule "Tick d'horloge VM :"
+    Ejacule compteur
+    Kelew compteur = compteur - 1
+Baraka
+
+Ejacule ">>> FIN DU PROGRAMME - TOUS SYSTEMES NOMINAUX <<<"
+Fio Del puta
