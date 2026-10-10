@@ -223,6 +223,7 @@ impl Lexer {
             "kelew" => TokenType::Kelew,
             "ejacule" => TokenType::Ejacule,
             "jib" | "chouf" => TokenType::Jib,
+            "jibou" | "import" => TokenType::Jibou,
             "zaama" => TokenType::Zaama,
             "walou" => TokenType::Walou,
             "khalas" => TokenType::Khalas,

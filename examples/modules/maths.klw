@@ -1,0 +1,13 @@
+# maths.klw - Module utilitaire mathematique pour Kelew Lang
+
+khedma carre(n)
+    raja3 n * n
+Baraka
+
+khedma cube(n)
+    raja3 n * n * n
+Baraka
+
+khedma perimetre(rayon)
+    raja3 2 * 3.14159 * rayon
+Baraka

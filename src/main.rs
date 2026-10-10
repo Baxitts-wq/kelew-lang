@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod bundler;
 pub mod compiler;
+pub mod diagnostic;
 pub mod disassembler;
 pub mod lexer;
 pub mod opcode;
@@ -12,8 +13,10 @@ pub mod vm;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 use compiler::Compiler;
+use diagnostic::Diagnostic;
 use disassembler::Disassembler;
 use lexer::Lexer;
 use parser::Parser;
@@ -43,15 +46,29 @@ fn print_help() {
     println!();
 }
 
-fn execute_source(source: &str, trace: bool) -> Result<(), String> {
+fn execute_source(
+    source: &str,
+    base_dir: Option<PathBuf>,
+    filename: Option<&str>,
+    trace: bool,
+) -> Result<(), String> {
     let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize()?;
+    let tokens = lexer
+        .tokenize()
+        .map_err(|e| Diagnostic::format_error(filename, source, "Lexicale", &e))?;
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse()?;
+    let program = parser
+        .parse()
+        .map_err(|e| Diagnostic::format_error(filename, source, "Syntaxe", &e))?;
 
-    let compiler = Compiler::new();
-    let chunk = compiler.compile(&program)?;
+    let base_path = base_dir.unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
+    let compiler = Compiler::with_base_dir(base_path);
+    let chunk = compiler
+        .compile(&program)
+        .map_err(|e| Diagnostic::format_error(filename, source, "Compilation", &e))?;
 
     let mut vm = VM::new();
     vm.set_trace(trace);
@@ -62,15 +79,28 @@ fn execute_source(source: &str, trace: bool) -> Result<(), String> {
     }
 }
 
-fn disassemble_source(source: &str, filename: &str) -> Result<(), String> {
+fn disassemble_source(
+    source: &str,
+    base_dir: Option<PathBuf>,
+    filename: &str,
+) -> Result<(), String> {
     let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize()?;
+    let tokens = lexer
+        .tokenize()
+        .map_err(|e| Diagnostic::format_error(Some(filename), source, "Lexicale", &e))?;
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse()?;
+    let program = parser
+        .parse()
+        .map_err(|e| Diagnostic::format_error(Some(filename), source, "Syntaxe", &e))?;
 
-    let compiler = Compiler::new();
-    let chunk = compiler.compile(&program)?;
+    let base_path = base_dir.unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
+    let compiler = Compiler::with_base_dir(base_path);
+    let chunk = compiler
+        .compile(&program)
+        .map_err(|e| Diagnostic::format_error(Some(filename), source, "Compilation", &e))?;
 
     let disasm = Disassembler::new(&chunk, filename);
     disasm.disassemble();
@@ -78,16 +108,29 @@ fn disassemble_source(source: &str, filename: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn check_source(source: &str) -> Result<(), String> {
+fn check_source(
+    source: &str,
+    base_dir: Option<PathBuf>,
+    filename: Option<&str>,
+) -> Result<(), String> {
     let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize()?;
+    let tokens = lexer
+        .tokenize()
+        .map_err(|e| Diagnostic::format_error(filename, source, "Lexicale", &e))?;
     let token_count = tokens.len();
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse()?;
+    let program = parser
+        .parse()
+        .map_err(|e| Diagnostic::format_error(filename, source, "Syntaxe", &e))?;
 
-    let compiler = Compiler::new();
-    let chunk = compiler.compile(&program)?;
+    let base_path = base_dir.unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
+    let compiler = Compiler::with_base_dir(base_path);
+    let chunk = compiler
+        .compile(&program)
+        .map_err(|e| Diagnostic::format_error(filename, source, "Compilation", &e))?;
 
     println!("[ok] Lexer: {} tokens", token_count);
     println!("[ok] Parser: {} AST statements", program.statements.len());
@@ -133,13 +176,13 @@ fn run_repl() {
                             Ok(chunk) => {
                                 vm.interpret(chunk);
                             }
-                            Err(e) => eprintln!("Erreur comp: {}", e),
+                            Err(e) => eprintln!("{}", Diagnostic::format_error(Some("<repl>"), trimmed, "Compilation", &e)),
                         }
                     }
-                    Err(e) => eprintln!("Erreur parse: {}", e),
+                    Err(e) => eprintln!("{}", Diagnostic::format_error(Some("<repl>"), trimmed, "Syntaxe", &e)),
                 }
             }
-            Err(e) => eprintln!("Erreur lexer: {}", e),
+            Err(e) => eprintln!("{}", Diagnostic::format_error(Some("<repl>"), trimmed, "Lexicale", &e)),
         }
     }
 }
@@ -182,8 +225,8 @@ fn run_demo() {
     "#;
 
     println!("=== EXECUTION DU SCRIPT DEMO SUR LA VM ===");
-    if let Err(e) = execute_source(demo_code, false) {
-        eprintln!("Erreur: {}", e);
+    if let Err(e) = execute_source(demo_code, None, Some("demo.klw"), false) {
+        eprintln!("{}", e);
     }
 }
 
@@ -234,8 +277,9 @@ fn main() {
 
             match fs::read_to_string(filename) {
                 Ok(source) => {
-                    if let Err(e) = execute_source(&source, trace) {
-                        eprintln!("Erreur d'exécution: {}", e);
+                    let base_dir = std::path::Path::new(filename).parent().map(|p| p.to_path_buf());
+                    if let Err(e) = execute_source(&source, base_dir, Some(filename), trace) {
+                        eprintln!("{}", e);
                     }
                 }
                 Err(e) => eprintln!("Impossible de lire le fichier '{}': {}", filename, e),
@@ -249,8 +293,9 @@ fn main() {
             let filename = &args[2];
             match fs::read_to_string(filename) {
                 Ok(source) => {
-                    if let Err(e) = disassemble_source(&source, filename) {
-                        eprintln!("Erreur de désassemblage: {}", e);
+                    let base_dir = std::path::Path::new(filename).parent().map(|p| p.to_path_buf());
+                    if let Err(e) = disassemble_source(&source, base_dir, filename) {
+                        eprintln!("{}", e);
                     }
                 }
                 Err(e) => eprintln!("Impossible de lire le fichier '{}': {}", filename, e),
@@ -264,8 +309,9 @@ fn main() {
             let filename = &args[2];
             match fs::read_to_string(filename) {
                 Ok(source) => {
-                    if let Err(e) = check_source(&source) {
-                        eprintln!("Erreur de vérification: {}", e);
+                    let base_dir = std::path::Path::new(filename).parent().map(|p| p.to_path_buf());
+                    if let Err(e) = check_source(&source, base_dir, Some(filename)) {
+                        eprintln!("{}", e);
                     }
                 }
                 Err(e) => eprintln!("Impossible de lire le fichier '{}': {}", filename, e),
@@ -279,8 +325,9 @@ fn main() {
             if other.ends_with(".klw") || other.ends_with(".kelew") {
                 match fs::read_to_string(other) {
                     Ok(source) => {
-                        if let Err(e) = execute_source(&source, false) {
-                            eprintln!("Erreur: {}", e);
+                        let base_dir = std::path::Path::new(other).parent().map(|p| p.to_path_buf());
+                        if let Err(e) = execute_source(&source, base_dir, Some(other), false) {
+                            eprintln!("{}", e);
                         }
                     }
                     Err(e) => eprintln!("Erreur lecture: {}", e),
@@ -310,7 +357,7 @@ mod tests {
             Fio Del puta
         "#;
 
-        let res = execute_source(code, false);
+        let res = execute_source(code, None, None, false);
         assert!(res.is_ok());
     }
 
@@ -325,7 +372,7 @@ mod tests {
             Fio Del puta
         "#;
 
-        let res = execute_source(code, false);
+        let res = execute_source(code, None, None, false);
         assert!(res.is_ok());
     }
 
@@ -338,7 +385,7 @@ mod tests {
             Fio Del puta
         "#;
 
-        let res = disassemble_source(code, "test_disasm");
+        let res = disassemble_source(code, None, "test_disasm");
         assert!(res.is_ok());
     }
 }

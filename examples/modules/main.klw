@@ -1,0 +1,33 @@
+# main.klw - Demonstration multi-fichiers et imports dans Kelew Lang
+T3boun dymek
+
+Jibou "maths.klw"
+
+Ejacule "=========================================="
+Ejacule "   KELEW MULTI-FILE ARCHITECTURE DEMO"
+Ejacule "=========================================="
+
+Kelew base = 5
+Kelew r_carre = carre(base)
+Kelew r_cube = cube(base)
+Kelew r_perimetre = perimetre(10)
+
+Ejacule "Valeur de base :"
+Ejacule base
+
+Ejacule "Carre (carre) :"
+Ejacule r_carre
+
+Ejacule "Cube (cube) :"
+Ejacule r_cube
+
+Ejacule "Perimetre cercle r=10 :"
+Ejacule r_perimetre
+
+Zaama r_carre == 25
+    Ejacule "Validation: Module maths charge avec succes (Sah) !"
+Walou
+    Ejacule "Erreur de calcul dans le module !"
+Khalas
+
+Fio Del puta

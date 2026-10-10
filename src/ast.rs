@@ -165,6 +165,10 @@ pub enum Stmt {
         value: Option<Expr>,
         span: Span,
     },
+    Import {
+        path: String,
+        span: Span,
+    },
     ExprStmt {
         expr: Expr,
         span: Span,

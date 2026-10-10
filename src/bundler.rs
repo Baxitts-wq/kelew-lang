@@ -25,7 +25,11 @@ impl Bundler {
         let mut parser = Parser::new(tokens);
         let program = parser.parse()?;
 
-        let compiler = Compiler::new();
+        let base_dir = std::path::Path::new(source_path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let compiler = Compiler::with_base_dir(base_dir);
         let chunk = compiler.compile(&program)?;
 
         let chunk_bytes = chunk.to_bytes();

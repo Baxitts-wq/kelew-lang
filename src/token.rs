@@ -18,6 +18,7 @@ pub enum TokenType {
     Kelew,           // Déclaration / mutation de variable
     Ejacule,         // Affichage console (Print)
     Jib,             // Saisie utilisateur (Input)
+    Jibou,           // Import de module (Jibou / import)
     Zaama,           // Condition Si (If)
     Walou,           // Branche Sinon (Else)
     Khalas,          // Fin de condition (EndIf)

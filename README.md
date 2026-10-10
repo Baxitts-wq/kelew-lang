@@ -71,6 +71,7 @@ Kelew is engineered for systems automation, embeddable application scripting, an
 | :--- | :--- | :--- |
 | `T3boun dymek` | `program_start` | Block initialization delimiter |
 | `Fio Del puta` | `program_end` | Execution termination delimiter |
+| `Jibou` / `import` | `import` | Multi-file module import statement |
 | `Kelew` | `let` / `var` | Variable declaration and binding |
 | `khedma` | `fn` / `function` | First-class function declaration |
 | `raja3` | `return` | Function return statement |
@@ -129,6 +130,49 @@ Ejacule cluster["statut"]     # Output: OPTIMAL
 
 Fio Del puta
 ```
+
+### Multi-File Module System (`Jibou`)
+
+Kelew supports modular multi-file architectures using the `Jibou "path.klw"` statement:
+
+- **Relative Path Resolution**: Paths are resolved relative to the importing file's directory.
+- **Single-Load Deduplication**: Modules are loaded and evaluated at most once across the entire dependency graph (diamond dependencies execute once).
+- **Circular Dependency Detection**: Import cycles are detected at compile-time and rejected with explicit error diagnostics.
+- **Monolithic Bytecode Inlining**: All imported modules are compiled directly into the root chunk, ensuring that `kelew build` produces a 100% self-contained standalone `.exe` with zero external file dependencies at runtime.
+
+Example multi-file program:
+
+```kelew
+# examples/modules/maths.klw
+khedma carre(n)
+    raja3 n * n
+Baraka
+```
+
+```kelew
+# examples/modules/main.klw
+T3boun dymek
+Jibou "maths.klw"
+
+Kelew res = carre(5)
+Ejacule res   # Output: 25
+
+Fio Del puta
+```
+
+### Visual Compiler & Runtime Diagnostics
+
+Kelew features an integrated visual diagnostic reporting engine providing precise file, line, and column tracking with source extracts and caret indicators:
+
+```text
+[Erreur Compilation] Module introuvable a la ligne 2: 'inexistant.klw' dans main.klw:2:1
+  |
+  2 | Jibou "inexistant.klw"
+    | ^--- Module introuvable a la ligne 2: 'inexistant.klw'
+  |
+```
+
+Line numbers are preserved through opcode emissions into the VM instruction stream, ensuring that runtime evaluation exceptions also indicate the exact source line where the fault occurred.
 
 ## Intelligence and Standard Library
 

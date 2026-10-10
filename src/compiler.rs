@@ -1,14 +1,35 @@
+use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
+
 use crate::ast::{BinaryOp, Expr, Program, Stmt, Value};
+use crate::lexer::Lexer;
 use crate::opcode::{Chunk, OpCode};
+use crate::parser::Parser;
 
 pub struct Compiler {
     chunk: Chunk,
+    base_dir: PathBuf,
+    loaded_modules: HashSet<PathBuf>,
+    importing_stack: Vec<PathBuf>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
             chunk: Chunk::new(),
+            base_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            loaded_modules: HashSet::new(),
+            importing_stack: Vec::new(),
+        }
+    }
+
+    pub fn with_base_dir(base_dir: PathBuf) -> Self {
+        Compiler {
+            chunk: Chunk::new(),
+            base_dir,
+            loaded_modules: HashSet::new(),
+            importing_stack: Vec::new(),
         }
     }
 
@@ -103,7 +124,7 @@ impl Compiler {
                 self.patch_jump(exit_jump, loop_end);
             }
             Stmt::Function { name, params, body, span } => {
-                let mut fn_compiler = Compiler::new();
+                let mut fn_compiler = Compiler::with_base_dir(self.base_dir.clone());
                 for s in body {
                     fn_compiler.compile_stmt(s)?;
                 }
@@ -128,6 +149,55 @@ impl Compiler {
                     self.chunk.write_op(OpCode::OpNil, span.line);
                 }
                 self.chunk.write_op(OpCode::OpReturn, span.line);
+            }
+            Stmt::Import { path, span } => {
+                let target_path = self.base_dir.join(path);
+                let canonical = match target_path.canonicalize() {
+                    Ok(c) => c,
+                    Err(_) => {
+                        return Err(format!(
+                            "Module introuvable a la ligne {}: '{}' (chemin teste: '{}')",
+                            span.line,
+                            path,
+                            target_path.display()
+                        ));
+                    }
+                };
+
+                if self.importing_stack.contains(&canonical) {
+                    return Err(format!(
+                        "Dependance circulaire detectee a la ligne {}: le module '{}' est deja en cours de chargement",
+                        span.line, path
+                    ));
+                }
+
+                if self.loaded_modules.contains(&canonical) {
+                    return Ok(());
+                }
+
+                self.loaded_modules.insert(canonical.clone());
+                self.importing_stack.push(canonical.clone());
+
+                let source = fs::read_to_string(&canonical).map_err(|e| {
+                    format!("Erreur de lecture du module '{}': {}", path, e)
+                })?;
+
+                let mut lexer = Lexer::new(&source);
+                let tokens = lexer.tokenize()?;
+                let mut parser = Parser::new(tokens);
+                let mod_program = parser.parse()?;
+
+                let prev_base_dir = self.base_dir.clone();
+                if let Some(parent) = canonical.parent() {
+                    self.base_dir = parent.to_path_buf();
+                }
+
+                for mod_stmt in &mod_program.statements {
+                    self.compile_stmt(mod_stmt)?;
+                }
+
+                self.base_dir = prev_base_dir;
+                self.importing_stack.pop();
             }
             Stmt::ExprStmt { expr, span } => {
                 self.compile_expr(expr)?;

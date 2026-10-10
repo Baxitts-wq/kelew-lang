@@ -92,8 +92,7 @@ impl VM {
                         (Value::String(x), Value::Number(y)) => self.push(Value::String(format!("{}{}", x, y))),
                         (Value::Number(x), Value::String(y)) => self.push(Value::String(format!("{}{}", x, y))),
                         (a, b) => {
-                            eprintln!("[Erreur Runtime VM] Types incompatibles pour l'addition: '{}' et '{}'", a, b);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Types incompatibles pour l'addition: '{}' et '{}'", a, b));
                         }
                     }
                 }
@@ -103,8 +102,7 @@ impl VM {
                     match (a, b) {
                         (Value::Number(x), Value::Number(y)) => self.push(Value::Number(x - y)),
                         (a, b) => {
-                            eprintln!("[Erreur Runtime VM] Soustraction requiert deux nombres: '{}' et '{}'", a, b);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Soustraction requiert deux nombres: '{}' et '{}'", a, b));
                         }
                     }
                 }
@@ -114,8 +112,7 @@ impl VM {
                     match (a, b) {
                         (Value::Number(x), Value::Number(y)) => self.push(Value::Number(x * y)),
                         (a, b) => {
-                            eprintln!("[Erreur Runtime VM] Multiplication requiert deux nombres: '{}' et '{}'", a, b);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Multiplication requiert deux nombres: '{}' et '{}'", a, b));
                         }
                     }
                 }
@@ -132,8 +129,7 @@ impl VM {
                             }
                         }
                         (a, b) => {
-                            eprintln!("[Erreur Runtime VM] Division requiert deux nombres: '{}' et '{}'", a, b);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Division requiert deux nombres: '{}' et '{}'", a, b));
                         }
                     }
                 }
@@ -143,8 +139,7 @@ impl VM {
                     match (a, b) {
                         (Value::Number(x), Value::Number(y)) => self.push(Value::Number(x % y)),
                         (a, b) => {
-                            eprintln!("[Erreur Runtime VM] Modulo requiert deux nombres: '{}' et '{}'", a, b);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Modulo requiert deux nombres: '{}' et '{}'", a, b));
                         }
                     }
                 }
@@ -153,8 +148,7 @@ impl VM {
                     match val {
                         Value::Number(n) => self.push(Value::Number(-n)),
                         other => {
-                            eprintln!("[Erreur Runtime VM] Négation numérique impossible sur '{}'", other);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Négation numérique impossible sur '{}'", other));
                         }
                     }
                 }
@@ -221,8 +215,7 @@ impl VM {
                     if let Some(val) = self.globals.get(&name) {
                         self.push(val.clone());
                     } else {
-                        eprintln!("[Erreur Runtime VM] Variable globale non définie: '{}'", name);
-                        return InterpretResult::RuntimeError;
+                        return self.runtime_error(&format!("Variable globale non définie: '{}'", name));
                     }
                 }
                 OpCode::OpSetGlobal(idx) => {
@@ -288,13 +281,12 @@ impl VM {
 
                     if let Some(Value::Function(user_fn)) = self.globals.get(&name).cloned() {
                         if args.len() != user_fn.params.len() {
-                            eprintln!(
-                                "[Erreur Runtime VM] Fonction '{}' attend {} arguments, reçu: {}",
+                            return self.runtime_error(&format!(
+                                "Fonction '{}' attend {} arguments, reçu: {}",
                                 name,
                                 user_fn.params.len(),
                                 args.len()
-                            );
-                            return InterpretResult::RuntimeError;
+                            ));
                         }
 
                         let mut sub_globals = self.globals.clone();
@@ -328,8 +320,7 @@ impl VM {
                         match crate::stdlib::StdLib::call(&name, &args) {
                             Ok(result) => self.push(result),
                             Err(e) => {
-                                eprintln!("[Erreur Native Kelew] {}", e);
-                                return InterpretResult::RuntimeError;
+                                return self.runtime_error(&format!("Erreur Native Kelew: {}", e));
                             }
                         }
                     }
@@ -364,14 +355,12 @@ impl VM {
                                 Value::Number(n) => {
                                     let idx = n as usize;
                                     if n < 0.0 || idx >= borrowed.len() {
-                                        eprintln!("[Erreur Runtime VM] Index de liste hors limites: {} (taille: {})", n, borrowed.len());
-                                        return InterpretResult::RuntimeError;
+                                        return self.runtime_error(&format!("Index de liste hors limites: {} (taille: {})", n, borrowed.len()));
                                     }
                                     self.push(borrowed[idx].clone());
                                 }
                                 other => {
-                                    eprintln!("[Erreur Runtime VM] L'index d'une liste doit etre un nombre, recu: '{}'", other);
-                                    return InterpretResult::RuntimeError;
+                                    return self.runtime_error(&format!("L'index d'une liste doit etre un nombre, recu: '{}'", other));
                                 }
                             }
                         }
@@ -399,8 +388,7 @@ impl VM {
                             }
                         }
                         other => {
-                            eprintln!("[Erreur Runtime VM] Indexation impossible sur '{}'", other);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Indexation impossible sur '{}'", other));
                         }
                     }
                 }
@@ -419,13 +407,11 @@ impl VM {
                                     } else if n >= 0.0 && idx == borrowed.len() {
                                         borrowed.push(val);
                                     } else {
-                                        eprintln!("[Erreur Runtime VM] Index hors limites pour assignation: {}", n);
-                                        return InterpretResult::RuntimeError;
+                                        return self.runtime_error(&format!("Index hors limites pour assignation: {}", n));
                                     }
                                 }
                                 other => {
-                                    eprintln!("[Erreur Runtime VM] Index invalide pour assignation de liste: '{}'", other);
-                                    return InterpretResult::RuntimeError;
+                                    return self.runtime_error(&format!("Index invalide pour assignation de liste: '{}'", other));
                                 }
                             }
                         }
@@ -437,8 +423,7 @@ impl VM {
                             m.borrow_mut().insert(key, val);
                         }
                         other => {
-                            eprintln!("[Erreur Runtime VM] Assignation par index impossible sur '{}'", other);
-                            return InterpretResult::RuntimeError;
+                            return self.runtime_error(&format!("Assignation par index impossible sur '{}'", other));
                         }
                     }
                 }
@@ -476,5 +461,19 @@ impl VM {
             Value::List(l) => !l.borrow().is_empty(),
             Value::Map(m) => !m.borrow().is_empty(),
         }
+    }
+
+    fn runtime_error(&self, message: &str) -> InterpretResult {
+        let line = if self.ip > 0 && self.ip - 1 < self.chunk.lines.len() {
+            self.chunk.lines[self.ip - 1]
+        } else {
+            0
+        };
+        if line > 0 {
+            eprintln!("[Erreur Runtime VM à la ligne {}] {}", line, message);
+        } else {
+            eprintln!("[Erreur Runtime VM] {}", message);
+        }
+        InterpretResult::RuntimeError
     }
 }

@@ -36,6 +36,8 @@ impl Parser {
             self.function_declaration()
         } else if self.match_token(&[TokenType::Raja3]) {
             self.return_statement()
+        } else if self.match_token(&[TokenType::Jibou]) {
+            self.import_statement()
         } else if self.match_token(&[TokenType::Kelew]) {
             self.var_declaration()
         } else if self.match_token(&[TokenType::Ejacule]) {
@@ -101,6 +103,24 @@ impl Parser {
             None
         };
         Ok(Stmt::Return { value, span })
+    }
+
+    fn import_statement(&mut self) -> Result<Stmt, String> {
+        let span = self.previous().span;
+        let path = match self.peek().token_type.clone() {
+            TokenType::String(s) => {
+                self.advance();
+                s
+            }
+            _ => {
+                return Err(format!(
+                    "Chemin de module (chaine de caracteres) attendu apres 'Jibou' a la ligne {}, colonne {}",
+                    self.peek().span.line,
+                    self.peek().span.col
+                ));
+            }
+        };
+        Ok(Stmt::Import { path, span })
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, String> {

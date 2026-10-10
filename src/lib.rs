@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod compiler;
+pub mod diagnostic;
 pub mod disassembler;
 pub mod lexer;
 pub mod opcode;
@@ -10,6 +11,7 @@ pub mod vm;
 
 pub use ast::Value;
 pub use compiler::Compiler;
+pub use diagnostic::Diagnostic;
 pub use disassembler::Disassembler;
 pub use lexer::Lexer;
 pub use opcode::{Chunk, OpCode};
@@ -19,12 +21,21 @@ pub use vm::{InterpretResult, VM};
 /// Moteur de scripting embarqué Kelew
 pub struct Engine {
     vm: VM,
+    base_dir: std::path::PathBuf,
 }
 
 impl Engine {
     pub fn new() -> Self {
         Engine {
             vm: VM::new(),
+            base_dir: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        }
+    }
+
+    pub fn with_base_dir(base_dir: std::path::PathBuf) -> Self {
+        Engine {
+            vm: VM::new(),
+            base_dir,
         }
     }
 
@@ -45,7 +56,7 @@ impl Engine {
         let mut parser = Parser::new(tokens);
         let program = parser.parse()?;
 
-        let compiler = Compiler::new();
+        let compiler = Compiler::with_base_dir(self.base_dir.clone());
         let chunk = compiler.compile(&program)?;
 
         self.vm.set_trace(trace);
