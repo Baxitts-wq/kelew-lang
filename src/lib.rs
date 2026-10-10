@@ -154,4 +154,43 @@ mod tests {
         assert_eq!(engine.get_global("act"), Some(&Value::Bool(true)));
         assert!(matches!(engine.get_global("ai_resp"), Some(Value::String(_))));
     }
+
+    #[test]
+    fn test_lists_and_indexing() {
+        let mut engine = Engine::new();
+        let code = r#"
+            T3boun dymek
+            Kelew liste = [10, 20, 30]
+            Kelew deuxieme = liste[1]
+            liste[0] = 99
+            Ajouter(liste, 40)
+            Kelew premier = liste[0]
+            Kelew taille = Longueur(liste)
+            Fio Del puta
+        "#;
+        assert!(engine.eval(code).is_ok());
+        assert_eq!(engine.get_global("deuxieme"), Some(&Value::Number(20.0)));
+        assert_eq!(engine.get_global("premier"), Some(&Value::Number(99.0)));
+        assert_eq!(engine.get_global("taille"), Some(&Value::Number(4.0)));
+    }
+
+    #[test]
+    fn test_maps_and_key_access() {
+        let mut engine = Engine::new();
+        let code = r#"
+            T3boun dymek
+            Kelew config = {"service": "bexy-core", "port": 8080}
+            Kelew nom = config["service"]
+            Kelew port = config["port"]
+            config["status"] = "online"
+            Kelew st = config["status"]
+            Kelew nb = Longueur(config)
+            Fio Del puta
+        "#;
+        assert!(engine.eval(code).is_ok());
+        assert_eq!(engine.get_global("nom"), Some(&Value::String("bexy-core".to_string())));
+        assert_eq!(engine.get_global("port"), Some(&Value::Number(8080.0)));
+        assert_eq!(engine.get_global("st"), Some(&Value::String("online".to_string())));
+        assert_eq!(engine.get_global("nb"), Some(&Value::Number(3.0)));
+    }
 }

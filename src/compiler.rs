@@ -34,6 +34,13 @@ impl Compiler {
                 self.chunk.write_op(OpCode::OpSetGlobal(name_idx), span.line);
                 self.chunk.write_op(OpCode::OpPop, span.line);
             }
+            Stmt::IndexAssign { target, index, value, span } => {
+                let target_idx = self.chunk.add_constant(Value::String(target.clone()));
+                self.chunk.write_op(OpCode::OpGetGlobal(target_idx), span.line);
+                self.compile_expr(index)?;
+                self.compile_expr(value)?;
+                self.chunk.write_op(OpCode::OpSetIndex, span.line);
+            }
             Stmt::Print { expr, span } => {
                 self.compile_expr(expr)?;
                 self.chunk.write_op(OpCode::OpPrint, span.line);
@@ -146,11 +153,29 @@ impl Compiler {
                 Value::Nil => {
                     self.chunk.write_op(OpCode::OpNil, span.line);
                 }
-                Value::Function(_) => {
+                Value::Function(_) | Value::List(_) | Value::Map(_) => {
                     let idx = self.chunk.add_constant(val.clone());
                     self.chunk.write_op(OpCode::OpConstant(idx), span.line);
                 }
             },
+            Expr::ListLiteral { elements, span } => {
+                for elem in elements {
+                    self.compile_expr(elem)?;
+                }
+                self.chunk.write_op(OpCode::OpBuildList(elements.len()), span.line);
+            }
+            Expr::MapLiteral { entries, span } => {
+                for (k, v) in entries {
+                    self.compile_expr(k)?;
+                    self.compile_expr(v)?;
+                }
+                self.chunk.write_op(OpCode::OpBuildMap(entries.len()), span.line);
+            }
+            Expr::Index { target, index, span } => {
+                self.compile_expr(target)?;
+                self.compile_expr(index)?;
+                self.chunk.write_op(OpCode::OpGetIndex, span.line);
+            }
             Expr::Variable(name, span) => {
                 let idx = self.chunk.add_constant(Value::String(name.clone()));
                 self.chunk.write_op(OpCode::OpGetGlobal(idx), span.line);

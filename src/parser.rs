@@ -222,6 +222,21 @@ impl Parser {
             }
         }
 
+        // Affectation par index x[i] = expr
+        if let Expr::Index { target, index, span } = &expr {
+            if let Expr::Variable(target_name, _) = target.as_ref() {
+                if self.match_token(&[TokenType::Equal]) {
+                    let value = self.expression()?;
+                    return Ok(Stmt::IndexAssign {
+                        target: target_name.clone(),
+                        index: *index.clone(),
+                        value,
+                        span: *span,
+                    });
+                }
+            }
+        }
+
         let span = expr.span();
         Ok(Stmt::ExprStmt { expr, span })
     }
@@ -304,7 +319,7 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Result<Expr, String> {
-        let mut expr = self.primary()?;
+        let mut expr = self.postfix()?;
 
         while self.match_token(&[TokenType::Star, TokenType::Slash, TokenType::Modulo]) {
             let op = match self.previous().token_type {
@@ -314,13 +329,33 @@ impl Parser {
                 _ => unreachable!(),
             };
             let span = self.previous().span;
-            let right = self.primary()?;
+            let right = self.postfix()?;
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
                 span,
             };
+        }
+
+        Ok(expr)
+    }
+
+    fn postfix(&mut self) -> Result<Expr, String> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_token(&[TokenType::LeftBracket]) {
+                let index = self.expression()?;
+                let span = self.consume(&TokenType::RightBracket, "Crochet fermant ']' attendu après l'index")?.span;
+                expr = Expr::Index {
+                    target: Box::new(expr),
+                    index: Box::new(index),
+                    span,
+                };
+            } else {
+                break;
+            }
         }
 
         Ok(expr)
@@ -334,6 +369,37 @@ impl Parser {
             TokenType::String(s) => Ok(Expr::Literal(Value::String(s), token.span)),
             TokenType::Sah => Ok(Expr::Literal(Value::Bool(true), token.span)),
             TokenType::K7hba => Ok(Expr::Literal(Value::Bool(false), token.span)),
+            TokenType::LeftBracket => {
+                let span = token.span;
+                let mut elements = Vec::new();
+                if !self.check(&TokenType::RightBracket) {
+                    loop {
+                        elements.push(self.expression()?);
+                        if !self.match_token(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                self.consume(&TokenType::RightBracket, "Crochet fermant ']' attendu après les éléments")?;
+                Ok(Expr::ListLiteral { elements, span })
+            }
+            TokenType::LeftBrace => {
+                let span = token.span;
+                let mut entries = Vec::new();
+                if !self.check(&TokenType::RightBrace) {
+                    loop {
+                        let key = self.expression()?;
+                        self.consume(&TokenType::Colon, "Deux-points ':' attendu après la clé")?;
+                        let val = self.expression()?;
+                        entries.push((key, val));
+                        if !self.match_token(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                self.consume(&TokenType::RightBrace, "Accolade fermante '}' attendue après les paires")?;
+                Ok(Expr::MapLiteral { entries, span })
+            }
             TokenType::Identifier(id) => {
                 let span = token.span;
                 if self.match_token(&[TokenType::LeftParen]) {

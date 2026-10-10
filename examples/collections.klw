@@ -1,0 +1,50 @@
+T3boun dymek
+
+# ==============================================================================
+# KELEW COLLECTIONS DEMO - LISTS & DICTIONARIES
+# ==============================================================================
+
+# 1. Declaration and mutation of dynamic lists
+Kelew serveurs = ["pc1-stream", "pc2-encoder", "pc3-backup"]
+Ejacule "Serveur initial:"
+Ejacule serveurs[1]
+
+# Mutation in-place
+serveurs[1] = "pc2-primary"
+Ejacule "Serveur modifie:"
+Ejacule serveurs[1]
+
+# Dynamic append
+Ajouter(serveurs, "pc4-edge")
+Ejacule "Nombre total de serveurs:"
+Ejacule Longueur(serveurs)
+
+# 2. Iteration through list with while loop
+Ejacule "--- Liste des serveurs actifs ---"
+Kelew i = 0
+Dima i < Longueur(serveurs)
+    Ejacule serveurs[i]
+    Kelew i = i + 1
+Baraka
+
+# 3. Dictionaries / HashMaps
+Kelew cluster = {
+    "nom": "Bexy High-Availability",
+    "nodes": 4,
+    "actif": Sah
+}
+
+Ejacule "--- Configuration du cluster ---"
+Ejacule cluster["nom"]
+Ejacule cluster["nodes"]
+
+cluster["statut"] = "OPTIMAL"
+Ejacule "Statut mis a jour:"
+Ejacule cluster["statut"]
+
+# 4. Standard library collection helpers
+Kelew cles_cluster = Cles(cluster)
+Ejacule "Nombre de cles dans cluster:"
+Ejacule Longueur(cles_cluster)
+
+Fio Del puta

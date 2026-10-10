@@ -334,6 +334,114 @@ impl VM {
                         }
                     }
                 }
+                OpCode::OpBuildList(count) => {
+                    let mut items = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        items.push(self.pop());
+                    }
+                    items.reverse();
+                    self.push(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items))));
+                }
+                OpCode::OpBuildMap(count) => {
+                    let mut map = HashMap::with_capacity(count);
+                    for _ in 0..count {
+                        let val = self.pop();
+                        let key = match self.pop() {
+                            Value::String(s) => s,
+                            other => other.to_string(),
+                        };
+                        map.insert(key, val);
+                    }
+                    self.push(Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map))));
+                }
+                OpCode::OpGetIndex => {
+                    let index = self.pop();
+                    let target = self.pop();
+                    match target {
+                        Value::List(l) => {
+                            let borrowed = l.borrow();
+                            match index {
+                                Value::Number(n) => {
+                                    let idx = n as usize;
+                                    if n < 0.0 || idx >= borrowed.len() {
+                                        eprintln!("[Erreur Runtime VM] Index de liste hors limites: {} (taille: {})", n, borrowed.len());
+                                        return InterpretResult::RuntimeError;
+                                    }
+                                    self.push(borrowed[idx].clone());
+                                }
+                                other => {
+                                    eprintln!("[Erreur Runtime VM] L'index d'une liste doit etre un nombre, recu: '{}'", other);
+                                    return InterpretResult::RuntimeError;
+                                }
+                            }
+                        }
+                        Value::Map(m) => {
+                            let key = match index {
+                                Value::String(s) => s,
+                                other => other.to_string(),
+                            };
+                            let borrowed = m.borrow();
+                            let val = borrowed.get(&key).cloned().unwrap_or(Value::Nil);
+                            self.push(val);
+                        }
+                        Value::String(s) => {
+                            match index {
+                                Value::Number(n) => {
+                                    let idx = n as usize;
+                                    if n >= 0.0 && idx < s.len() {
+                                        let ch = s.chars().nth(idx).unwrap_or('\0').to_string();
+                                        self.push(Value::String(ch));
+                                    } else {
+                                        self.push(Value::Nil);
+                                    }
+                                }
+                                _ => self.push(Value::Nil),
+                            }
+                        }
+                        other => {
+                            eprintln!("[Erreur Runtime VM] Indexation impossible sur '{}'", other);
+                            return InterpretResult::RuntimeError;
+                        }
+                    }
+                }
+                OpCode::OpSetIndex => {
+                    let val = self.pop();
+                    let index = self.pop();
+                    let target = self.pop();
+                    match target {
+                        Value::List(l) => {
+                            match index {
+                                Value::Number(n) => {
+                                    let idx = n as usize;
+                                    let mut borrowed = l.borrow_mut();
+                                    if n >= 0.0 && idx < borrowed.len() {
+                                        borrowed[idx] = val;
+                                    } else if n >= 0.0 && idx == borrowed.len() {
+                                        borrowed.push(val);
+                                    } else {
+                                        eprintln!("[Erreur Runtime VM] Index hors limites pour assignation: {}", n);
+                                        return InterpretResult::RuntimeError;
+                                    }
+                                }
+                                other => {
+                                    eprintln!("[Erreur Runtime VM] Index invalide pour assignation de liste: '{}'", other);
+                                    return InterpretResult::RuntimeError;
+                                }
+                            }
+                        }
+                        Value::Map(m) => {
+                            let key = match index {
+                                Value::String(s) => s,
+                                other => other.to_string(),
+                            };
+                            m.borrow_mut().insert(key, val);
+                        }
+                        other => {
+                            eprintln!("[Erreur Runtime VM] Assignation par index impossible sur '{}'", other);
+                            return InterpretResult::RuntimeError;
+                        }
+                    }
+                }
                 OpCode::OpReturn => {
                     break;
                 }
@@ -365,6 +473,8 @@ impl VM {
             Value::Number(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Function(_) => true,
+            Value::List(l) => !l.borrow().is_empty(),
+            Value::Map(m) => !m.borrow().is_empty(),
         }
     }
 }

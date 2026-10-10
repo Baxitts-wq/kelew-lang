@@ -122,7 +122,68 @@ impl StdLib {
                 }
                 match &args[0] {
                     Value::String(s) => Ok(Value::Number(s.len() as f64)),
+                    Value::List(l) => Ok(Value::Number(l.borrow().len() as f64)),
+                    Value::Map(m) => Ok(Value::Number(m.borrow().len() as f64)),
                     _ => Ok(Value::Number(0.0)),
+                }
+            }
+
+            // ==================== COLLECTIONS ====================
+            "ajouter" | "push" => {
+                if args.len() < 2 {
+                    return Err("Usage: Ajouter(liste, element)".to_string());
+                }
+                match &args[0] {
+                    Value::List(l) => {
+                        l.borrow_mut().push(args[1].clone());
+                        Ok(Value::Bool(true))
+                    }
+                    other => Err(format!("Ajouter attend une liste en premier argument, recu: '{}'", other)),
+                }
+            }
+
+            "supprimerindex" | "removeat" => {
+                if args.len() < 2 {
+                    return Err("Usage: SupprimerIndex(liste, index)".to_string());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::List(l), Value::Number(n)) => {
+                        let idx = *n as usize;
+                        let mut borrowed = l.borrow_mut();
+                        if idx < borrowed.len() {
+                            let removed = borrowed.remove(idx);
+                            Ok(removed)
+                        } else {
+                            Err(format!("Index hors limites pour suppression: {}", idx))
+                        }
+                    }
+                    _ => Err("Usage: SupprimerIndex(liste, index_numerique)".to_string()),
+                }
+            }
+
+            "cles" | "keys" => {
+                if args.is_empty() {
+                    return Err("Usage: Cles(dictionnaire)".to_string());
+                }
+                match &args[0] {
+                    Value::Map(m) => {
+                        let keys: Vec<Value> = m.borrow().keys().map(|k| Value::String(k.clone())).collect();
+                        Ok(Value::List(std::rc::Rc::new(std::cell::RefCell::new(keys))))
+                    }
+                    _ => Err("Cles attend un dictionnaire".to_string()),
+                }
+            }
+
+            "valeurs" | "values" => {
+                if args.is_empty() {
+                    return Err("Usage: Valeurs(dictionnaire)".to_string());
+                }
+                match &args[0] {
+                    Value::Map(m) => {
+                        let vals: Vec<Value> = m.borrow().values().cloned().collect();
+                        Ok(Value::List(std::rc::Rc::new(std::cell::RefCell::new(vals))))
+                    }
+                    _ => Err("Valeurs attend un dictionnaire".to_string()),
                 }
             }
 

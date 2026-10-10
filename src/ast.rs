@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use crate::token::Span;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,6 +18,8 @@ pub enum Value {
     Bool(bool),
     Nil,
     Function(Box<UserFunction>),
+    List(Rc<RefCell<Vec<Value>>>),
+    Map(Rc<RefCell<HashMap<String, Value>>>),
 }
 
 impl std::fmt::Display for Value {
@@ -30,6 +36,18 @@ impl std::fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", if *b { "Sah (vrai)" } else { "K7hba (faux)" }),
             Value::Nil => write!(f, "Walou (nil)"),
             Value::Function(f_val) => write!(f, "<khedma {}({})>", f_val.name, f_val.params.join(", ")),
+            Value::List(list) => {
+                let items: Vec<String> = list.borrow().iter().map(|v| v.to_string()).collect();
+                write!(f, "[{}]", items.join(", "))
+            }
+            Value::Map(map) => {
+                let pairs: Vec<String> = map
+                    .borrow()
+                    .iter()
+                    .map(|(k, v)| format!("\"{}\": {}", k, v))
+                    .collect();
+                write!(f, "{{{}}}", pairs.join(", "))
+            }
         }
     }
 }
@@ -52,6 +70,19 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Value, Span),
+    ListLiteral {
+        elements: Vec<Expr>,
+        span: Span,
+    },
+    MapLiteral {
+        entries: Vec<(Expr, Expr)>,
+        span: Span,
+    },
+    Index {
+        target: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
     Variable(String, Span),
     Input(Span),
     Binary {
@@ -75,6 +106,9 @@ impl Expr {
     pub fn span(&self) -> Span {
         match self {
             Expr::Literal(_, span) => *span,
+            Expr::ListLiteral { span, .. } => *span,
+            Expr::MapLiteral { span, .. } => *span,
+            Expr::Index { span, .. } => *span,
             Expr::Variable(_, span) => *span,
             Expr::Input(span) => *span,
             Expr::Binary { span, .. } => *span,
@@ -93,6 +127,12 @@ pub enum Stmt {
     },
     Assign {
         name: String,
+        value: Expr,
+        span: Span,
+    },
+    IndexAssign {
+        target: String,
+        index: Expr,
         value: Expr,
         span: Span,
     },

@@ -104,9 +104,45 @@ Ejacule resultat   # Output: 120
 Fio Del puta
 ```
 
+### Data Structures (Lists & Dictionaries)
+
+Kelew provides native dynamic lists and associative maps with in-place mutation and subscript indexing:
+
+```kelew
+T3boun dymek
+
+# Dynamic lists
+Kelew serveurs = ["pc1-stream", "pc2-encoder"]
+serveurs[1] = "pc2-primary"
+Ajouter(serveurs, "pc3-backup")
+Ejacule serveurs[1]           # Output: pc2-primary
+Ejacule Longueur(serveurs)    # Output: 3
+
+# Dictionaries / HashMaps
+Kelew cluster = {
+    "nom": "Bexy Cluster",
+    "nodes": 3,
+    "actif": Sah
+}
+cluster["statut"] = "OPTIMAL"
+Ejacule cluster["statut"]     # Output: OPTIMAL
+
+Fio Del puta
+```
+
 ## Intelligence and Standard Library
 
 Kelew provides a standard library built without external crates:
+
+### Collections and Data Structures
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `Ajouter` / `Push` | `Ajouter(liste, element)` | Appends element to list |
+| `SupprimerIndex` / `RemoveAt` | `SupprimerIndex(liste, index)` | Removes and returns element at specified index |
+| `Cles` / `Keys` | `Cles(dictionnaire)` | Returns list of all keys in dictionary |
+| `Valeurs` / `Values` | `Valeurs(dictionnaire)` | Returns list of all values in dictionary |
+| `Longueur` / `Len` | `Longueur(collection)` | Returns count of items (strings, lists, maps) |
 
 ### AI and Data Extraction
 
@@ -128,7 +164,6 @@ Kelew provides a standard library built without external crates:
 | `TempsMs` | `TempsMs()` | Returns current Unix epoch timestamp in milliseconds |
 | `Dormir` | `Dormir(ms)` | Suspends thread execution for specified milliseconds |
 | `LireEnv` | `LireEnv(key)` | Reads system environment variable |
-| `Longueur` | `Longueur(str)` | Returns string length |
 
 ### AI Workflow Example
 
@@ -163,6 +198,10 @@ The bytecode compiler emits fixed-width opcodes stored in contiguous chunks:
 - `OP_LOOP <offset>`: Unconditional backward jump for loop iterations.
 - `OP_CALL <name_idx> <argc>`: Execute user-defined function or native standard library primitive.
 - `OP_RETURN`: Return from function scope, preserving evaluated return value.
+- `OP_BUILD_LIST <count>`: Construct dynamic list from top stack elements.
+- `OP_BUILD_MAP <count>`: Construct associative map from key-value pairs on stack.
+- `OP_GET_INDEX`: Read element from list, map, or string by index.
+- `OP_SET_INDEX`: Mutate element in list or map in-place.
 - `OP_PRINT`: Pop stack top and write to standard output.
 - `OP_INPUT <idx>`: Read input from standard input and assign to global variable.
 - `OP_HALT`: Terminate virtual machine evaluation.

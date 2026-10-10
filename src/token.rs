@@ -47,7 +47,12 @@ pub enum TokenType {
     // Délimiteurs
     LeftParen,       // (
     RightParen,      // )
+    LeftBracket,     // [
+    RightBracket,    // ]
+    LeftBrace,       // {
+    RightBrace,      // }
     Comma,           // ,
+    Colon,           // :
 
     // Littéraux et identifiants
     Number(f64),

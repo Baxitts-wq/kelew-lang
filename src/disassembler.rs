@@ -88,6 +88,10 @@ impl<'a> Disassembler<'a> {
                 println!("{:<18} #{:<4} ({} avec {} args)", "OP_CALL", name_idx, name, argc);
             }
             OpCode::OpReturn => println!("{:<18} (Raja3)", "OP_RETURN"),
+            OpCode::OpBuildList(count) => println!("{:<18} ({} elements)", "OP_BUILD_LIST", count),
+            OpCode::OpBuildMap(count) => println!("{:<18} ({} paires)", "OP_BUILD_MAP", count),
+            OpCode::OpGetIndex => println!("{:<18} (GetIndex)", "OP_GET_INDEX"),
+            OpCode::OpSetIndex => println!("{:<18} (SetIndex)", "OP_SET_INDEX"),
             OpCode::OpHalt => println!("{:<18} (Baraka/FioDelPuta)", "OP_HALT"),
         }
 

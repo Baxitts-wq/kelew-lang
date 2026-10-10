@@ -42,6 +42,10 @@ pub enum OpCode {
     OpCall(usize, usize), // (name_idx, arg_count)
 
     OpReturn,
+    OpBuildList(usize),
+    OpBuildMap(usize),
+    OpGetIndex,
+    OpSetIndex,
     // Fin d'exécution
     OpHalt,
 }
@@ -124,6 +128,33 @@ impl Chunk {
                     buf.extend_from_slice(&(chunk_bytes.len() as u32).to_le_bytes());
                     buf.extend_from_slice(&chunk_bytes);
                 }
+                Value::List(l) => {
+                    buf.push(0x06);
+                    let borrowed = l.borrow();
+                    let count = borrowed.len() as u32;
+                    buf.extend_from_slice(&count.to_le_bytes());
+                    let mut sub_chunk = Chunk::new();
+                    for elem in borrowed.iter() {
+                        sub_chunk.add_constant(elem.clone());
+                    }
+                    let sub_bytes = sub_chunk.to_bytes();
+                    buf.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(&sub_bytes);
+                }
+                Value::Map(m) => {
+                    buf.push(0x07);
+                    let borrowed = m.borrow();
+                    let count = borrowed.len() as u32;
+                    buf.extend_from_slice(&count.to_le_bytes());
+                    let mut sub_chunk = Chunk::new();
+                    for (k, v) in borrowed.iter() {
+                        sub_chunk.add_constant(Value::String(k.clone()));
+                        sub_chunk.add_constant(v.clone());
+                    }
+                    let sub_bytes = sub_chunk.to_bytes();
+                    buf.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(&sub_bytes);
+                }
             }
         }
 
@@ -193,6 +224,16 @@ impl Chunk {
                 }
                 OpCode::OpHalt => buf.push(28),
                 OpCode::OpReturn => buf.push(29),
+                OpCode::OpBuildList(count) => {
+                    buf.push(30);
+                    buf.extend_from_slice(&(*count as u32).to_le_bytes());
+                }
+                OpCode::OpBuildMap(count) => {
+                    buf.push(31);
+                    buf.extend_from_slice(&(*count as u32).to_le_bytes());
+                }
+                OpCode::OpGetIndex => buf.push(32),
+                OpCode::OpSetIndex => buf.push(33),
             }
         }
 
@@ -276,6 +317,34 @@ impl Chunk {
                         params,
                         chunk: sub_chunk,
                     })));
+                }
+                0x06 => {
+                    if cur + 4 > bytes.len() { return Err("Erreur list count".to_string()); }
+                    let _count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    if cur + 4 > bytes.len() { return Err("Erreur list subchunk len".to_string()); }
+                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    let sub = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    cur += chk_len;
+                    constants.push(Value::List(std::rc::Rc::new(std::cell::RefCell::new(sub.constants))));
+                }
+                0x07 => {
+                    if cur + 4 > bytes.len() { return Err("Erreur map count".to_string()); }
+                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    if cur + 4 > bytes.len() { return Err("Erreur map subchunk len".to_string()); }
+                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    let sub = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    cur += chk_len;
+                    let mut map = std::collections::HashMap::new();
+                    for i in 0..count {
+                        if let (Some(Value::String(k)), Some(v)) = (sub.constants.get(i * 2), sub.constants.get(i * 2 + 1)) {
+                            map.insert(k.clone(), v.clone());
+                        }
+                    }
+                    constants.push(Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map))));
                 }
                 _ => return Err(format!("Tag de constante inconnu: 0x{:02X}", tag)),
             }
@@ -370,6 +439,18 @@ impl Chunk {
                 }
                 28 => OpCode::OpHalt,
                 29 => OpCode::OpReturn,
+                30 => {
+                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    OpCode::OpBuildList(count)
+                }
+                31 => {
+                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    OpCode::OpBuildMap(count)
+                }
+                32 => OpCode::OpGetIndex,
+                33 => OpCode::OpSetIndex,
                 _ => return Err(format!("Opcode inconnu: {}", op_tag)),
             };
 

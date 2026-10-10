@@ -66,6 +66,11 @@ impl Lexer {
             }
             '(' => Ok(Some(self.make_token(TokenType::LeftParen))),
             ')' => Ok(Some(self.make_token(TokenType::RightParen))),
+            '[' => Ok(Some(self.make_token(TokenType::LeftBracket))),
+            ']' => Ok(Some(self.make_token(TokenType::RightBracket))),
+            '{' => Ok(Some(self.make_token(TokenType::LeftBrace))),
+            '}' => Ok(Some(self.make_token(TokenType::RightBrace))),
+            ':' => Ok(Some(self.make_token(TokenType::Colon))),
             ',' => Ok(Some(self.make_token(TokenType::Comma))),
             '+' => Ok(Some(self.make_token(TokenType::Plus))),
             '-' => Ok(Some(self.make_token(TokenType::Minus))),
