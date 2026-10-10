@@ -59,6 +59,65 @@ pub struct Chunk {
     pub files: Vec<String>,
 }
 
+pub const BYTECODE_MAGIC: &[u8; 8] = b"KLW_BC01";
+pub const BYTECODE_VERSION: u8 = 1;
+
+/// Calcul de somme de contrôle Adler-32 (100% natif, zéro dépendance externe)
+pub fn adler32(data: &[u8]) -> u32 {
+    let mut a: u32 = 1;
+    let mut b: u32 = 0;
+    const MOD_ADLER: u32 = 65521;
+
+    for &byte in data {
+        a = (a + byte as u32) % MOD_ADLER;
+        b = (b + a) % MOD_ADLER;
+    }
+
+    (b << 16) | a
+}
+
+#[inline]
+fn read_u8(buf: &[u8], cur: &mut usize) -> Result<u8, String> {
+    if *cur >= buf.len() {
+        return Err("Fin inattendue des données (octet manquant)".to_string());
+    }
+    let val = buf[*cur];
+    *cur += 1;
+    Ok(val)
+}
+
+#[inline]
+fn read_u32(buf: &[u8], cur: &mut usize) -> Result<u32, String> {
+    if *cur + 4 > buf.len() {
+        return Err("Fin inattendue des données (u32 manquant)".to_string());
+    }
+    let val = u32::from_le_bytes([buf[*cur], buf[*cur + 1], buf[*cur + 2], buf[*cur + 3]]);
+    *cur += 4;
+    Ok(val)
+}
+
+#[inline]
+fn read_f64(buf: &[u8], cur: &mut usize) -> Result<f64, String> {
+    if *cur + 8 > buf.len() {
+        return Err("Fin inattendue des données (f64 manquant)".to_string());
+    }
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&buf[*cur..*cur + 8]);
+    *cur += 8;
+    Ok(f64::from_le_bytes(bytes))
+}
+
+#[inline]
+fn read_string(buf: &[u8], cur: &mut usize) -> Result<String, String> {
+    let len = read_u32(buf, cur)? as usize;
+    if *cur + len > buf.len() {
+        return Err(format!("Fin inattendue des données (chaîne de longueur {} tronquée)", len));
+    }
+    let s = String::from_utf8_lossy(&buf[*cur..*cur + len]).to_string();
+    *cur += len;
+    Ok(s)
+}
+
 impl Chunk {
     pub fn new() -> Self {
         Chunk {
@@ -109,245 +168,241 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    /// Sérialise le Chunk en format binaire portable
+    /// Sérialise le Chunk en format binaire portable avec magic header KLW_BC01 et checksum Adler-32
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
+        let mut payload = Vec::new();
 
         // 1. Constantes
         let const_count = self.constants.len() as u32;
-        buf.extend_from_slice(&const_count.to_le_bytes());
+        payload.extend_from_slice(&const_count.to_le_bytes());
 
         for c in &self.constants {
             match c {
                 Value::Number(n) => {
-                    buf.push(0x01);
-                    buf.extend_from_slice(&n.to_le_bytes());
+                    payload.push(0x01);
+                    payload.extend_from_slice(&n.to_le_bytes());
                 }
                 Value::String(s) => {
-                    buf.push(0x02);
+                    payload.push(0x02);
                     let bytes = s.as_bytes();
                     let len = bytes.len() as u32;
-                    buf.extend_from_slice(&len.to_le_bytes());
-                    buf.extend_from_slice(bytes);
+                    payload.extend_from_slice(&len.to_le_bytes());
+                    payload.extend_from_slice(bytes);
                 }
                 Value::Bool(b) => {
-                    buf.push(0x03);
-                    buf.push(if *b { 1 } else { 0 });
+                    payload.push(0x03);
+                    payload.push(if *b { 1 } else { 0 });
                 }
                 Value::Nil => {
-                    buf.push(0x04);
+                    payload.push(0x04);
                 }
                 Value::Function(f_val) => {
-                    buf.push(0x05);
+                    payload.push(0x05);
                     let name_bytes = f_val.name.as_bytes();
-                    buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
-                    buf.extend_from_slice(name_bytes);
+                    payload.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(name_bytes);
 
-                    buf.extend_from_slice(&(f_val.params.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(&(f_val.params.len() as u32).to_le_bytes());
                     for p in &f_val.params {
                         let p_bytes = p.as_bytes();
-                        buf.extend_from_slice(&(p_bytes.len() as u32).to_le_bytes());
-                        buf.extend_from_slice(p_bytes);
+                        payload.extend_from_slice(&(p_bytes.len() as u32).to_le_bytes());
+                        payload.extend_from_slice(p_bytes);
                     }
 
                     let chunk_bytes = f_val.chunk.to_bytes();
-                    buf.extend_from_slice(&(chunk_bytes.len() as u32).to_le_bytes());
-                    buf.extend_from_slice(&chunk_bytes);
+                    payload.extend_from_slice(&(chunk_bytes.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(&chunk_bytes);
                 }
                 Value::List(l) => {
-                    buf.push(0x06);
+                    payload.push(0x06);
                     let borrowed = l.borrow();
                     let count = borrowed.len() as u32;
-                    buf.extend_from_slice(&count.to_le_bytes());
+                    payload.extend_from_slice(&count.to_le_bytes());
                     let mut sub_chunk = Chunk::new();
                     for elem in borrowed.iter() {
                         sub_chunk.add_constant(elem.clone());
                     }
                     let sub_bytes = sub_chunk.to_bytes();
-                    buf.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
-                    buf.extend_from_slice(&sub_bytes);
+                    payload.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(&sub_bytes);
                 }
                 Value::Map(m) => {
-                    buf.push(0x07);
+                    payload.push(0x07);
                     let borrowed = m.borrow();
                     let count = borrowed.len() as u32;
-                    buf.extend_from_slice(&count.to_le_bytes());
+                    payload.extend_from_slice(&count.to_le_bytes());
                     let mut sub_chunk = Chunk::new();
                     for (k, v) in borrowed.iter() {
                         sub_chunk.add_constant(Value::String(k.clone()));
                         sub_chunk.add_constant(v.clone());
                     }
                     let sub_bytes = sub_chunk.to_bytes();
-                    buf.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
-                    buf.extend_from_slice(&sub_bytes);
+                    payload.extend_from_slice(&(sub_bytes.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(&sub_bytes);
                 }
             }
         }
 
         // 2. Fichiers sources
         let file_count = self.files.len() as u32;
-        buf.extend_from_slice(&file_count.to_le_bytes());
+        payload.extend_from_slice(&file_count.to_le_bytes());
         for f in &self.files {
             let bytes = f.as_bytes();
-            buf.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
-            buf.extend_from_slice(bytes);
+            payload.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            payload.extend_from_slice(bytes);
         }
 
         // 3. Instructions (Opcodes)
         let code_count = self.code.len() as u32;
-        buf.extend_from_slice(&code_count.to_le_bytes());
+        payload.extend_from_slice(&code_count.to_le_bytes());
 
         for (i, op) in self.code.iter().enumerate() {
             let line = (self.lines.get(i).copied().unwrap_or(0)) as u32;
-            buf.extend_from_slice(&line.to_le_bytes());
+            payload.extend_from_slice(&line.to_le_bytes());
 
             let file_id = (self.file_ids.get(i).copied().unwrap_or(0)) as u32;
-            buf.extend_from_slice(&file_id.to_le_bytes());
+            payload.extend_from_slice(&file_id.to_le_bytes());
 
             match op {
                 OpCode::OpConstant(idx) => {
-                    buf.push(1);
-                    buf.extend_from_slice(&(*idx as u32).to_le_bytes());
+                    payload.push(1);
+                    payload.extend_from_slice(&(*idx as u32).to_le_bytes());
                 }
-                OpCode::OpNil => buf.push(2),
-                OpCode::OpTrue => buf.push(3),
-                OpCode::OpFalse => buf.push(4),
-                OpCode::OpPop => buf.push(5),
-                OpCode::OpAdd => buf.push(6),
-                OpCode::OpSubtract => buf.push(7),
-                OpCode::OpMultiply => buf.push(8),
-                OpCode::OpDivide => buf.push(9),
-                OpCode::OpModulo => buf.push(10),
-                OpCode::OpNegate => buf.push(11),
-                OpCode::OpEqual => buf.push(12),
-                OpCode::OpNotEqual => buf.push(13),
-                OpCode::OpGreater => buf.push(14),
-                OpCode::OpGreaterEqual => buf.push(15),
-                OpCode::OpLess => buf.push(16),
-                OpCode::OpLessEqual => buf.push(17),
-                OpCode::OpNot => buf.push(18),
+                OpCode::OpNil => payload.push(2),
+                OpCode::OpTrue => payload.push(3),
+                OpCode::OpFalse => payload.push(4),
+                OpCode::OpPop => payload.push(5),
+                OpCode::OpAdd => payload.push(6),
+                OpCode::OpSubtract => payload.push(7),
+                OpCode::OpMultiply => payload.push(8),
+                OpCode::OpDivide => payload.push(9),
+                OpCode::OpModulo => payload.push(10),
+                OpCode::OpNegate => payload.push(11),
+                OpCode::OpEqual => payload.push(12),
+                OpCode::OpNotEqual => payload.push(13),
+                OpCode::OpGreater => payload.push(14),
+                OpCode::OpGreaterEqual => payload.push(15),
+                OpCode::OpLess => payload.push(16),
+                OpCode::OpLessEqual => payload.push(17),
+                OpCode::OpNot => payload.push(18),
                 OpCode::OpDefineGlobal(idx) => {
-                    buf.push(19);
-                    buf.extend_from_slice(&(*idx as u32).to_le_bytes());
+                    payload.push(19);
+                    payload.extend_from_slice(&(*idx as u32).to_le_bytes());
                 }
                 OpCode::OpGetGlobal(idx) => {
-                    buf.push(20);
-                    buf.extend_from_slice(&(*idx as u32).to_le_bytes());
+                    payload.push(20);
+                    payload.extend_from_slice(&(*idx as u32).to_le_bytes());
                 }
                 OpCode::OpSetGlobal(idx) => {
-                    buf.push(21);
-                    buf.extend_from_slice(&(*idx as u32).to_le_bytes());
+                    payload.push(21);
+                    payload.extend_from_slice(&(*idx as u32).to_le_bytes());
                 }
                 OpCode::OpJumpIfFalse(target) => {
-                    buf.push(22);
-                    buf.extend_from_slice(&(*target as u32).to_le_bytes());
+                    payload.push(22);
+                    payload.extend_from_slice(&(*target as u32).to_le_bytes());
                 }
                 OpCode::OpJump(target) => {
-                    buf.push(23);
-                    buf.extend_from_slice(&(*target as u32).to_le_bytes());
+                    payload.push(23);
+                    payload.extend_from_slice(&(*target as u32).to_le_bytes());
                 }
                 OpCode::OpLoop(target) => {
-                    buf.push(24);
-                    buf.extend_from_slice(&(*target as u32).to_le_bytes());
+                    payload.push(24);
+                    payload.extend_from_slice(&(*target as u32).to_le_bytes());
                 }
-                OpCode::OpPrint => buf.push(25),
+                OpCode::OpPrint => payload.push(25),
                 OpCode::OpInput(idx) => {
-                    buf.push(26);
-                    buf.extend_from_slice(&(*idx as u32).to_le_bytes());
+                    payload.push(26);
+                    payload.extend_from_slice(&(*idx as u32).to_le_bytes());
                 }
                 OpCode::OpCall(name_idx, argc) => {
-                    buf.push(27);
-                    buf.extend_from_slice(&(*name_idx as u32).to_le_bytes());
-                    buf.extend_from_slice(&(*argc as u32).to_le_bytes());
+                    payload.push(27);
+                    payload.extend_from_slice(&(*name_idx as u32).to_le_bytes());
+                    payload.extend_from_slice(&(*argc as u32).to_le_bytes());
                 }
-                OpCode::OpHalt => buf.push(28),
-                OpCode::OpReturn => buf.push(29),
+                OpCode::OpHalt => payload.push(28),
+                OpCode::OpReturn => payload.push(29),
                 OpCode::OpBuildList(count) => {
-                    buf.push(30);
-                    buf.extend_from_slice(&(*count as u32).to_le_bytes());
+                    payload.push(30);
+                    payload.extend_from_slice(&(*count as u32).to_le_bytes());
                 }
                 OpCode::OpBuildMap(count) => {
-                    buf.push(31);
-                    buf.extend_from_slice(&(*count as u32).to_le_bytes());
+                    payload.push(31);
+                    payload.extend_from_slice(&(*count as u32).to_le_bytes());
                 }
-                OpCode::OpGetIndex => buf.push(32),
-                OpCode::OpSetIndex => buf.push(33),
+                OpCode::OpGetIndex => payload.push(32),
+                OpCode::OpSetIndex => payload.push(33),
             }
         }
 
-        buf
+        // Assemblage final : [MAGIC: 8 octets] [CHECKSUM: 4 octets] [PAYLOAD...]
+        let checksum = adler32(&payload);
+        let mut container = Vec::with_capacity(12 + payload.len());
+        container.extend_from_slice(BYTECODE_MAGIC);
+        container.extend_from_slice(&checksum.to_le_bytes());
+        container.extend_from_slice(&payload);
+        container
     }
 
-    /// Désérialise le format binaire en Chunk prêt à l'exécution
+    /// Désérialise le format binaire en Chunk prêt à l'exécution avec vérification stricte
     pub fn from_bytes(bytes: &[u8]) -> Result<Chunk, String> {
+        if bytes.len() < 12 {
+            return Err("Format de bytecode tronqué: en-tête manquant (taille < 12 octets)".to_string());
+        }
+
+        let magic = &bytes[0..8];
+        if magic != BYTECODE_MAGIC {
+            return Err(format!(
+                "En-tête de bytecode invalide: attendu {:?}, reçu {:?}",
+                BYTECODE_MAGIC, magic
+            ));
+        }
+
+        let expected_checksum = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let payload = &bytes[12..];
+        let computed_checksum = adler32(payload);
+
+        if computed_checksum != expected_checksum {
+            return Err(format!(
+                "Échec d'intégrité du bytecode (Adler-32): attendu 0x{:08X}, calculé 0x{:08X}",
+                expected_checksum, computed_checksum
+            ));
+        }
+
         let mut cur = 0;
 
         // 1. Lire les constantes
-        if bytes.len() < 4 {
-            return Err("Format de bytecode tronqué.".to_string());
-        }
-        let const_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-        cur += 4;
-
+        let const_count = read_u32(payload, &mut cur)? as usize;
         let mut constants = Vec::with_capacity(const_count);
         for _ in 0..const_count {
-            if cur >= bytes.len() {
-                return Err("Format de bytecode invalide (constantes).".to_string());
-            }
-            let tag = bytes[cur];
-            cur += 1;
+            let tag = read_u8(payload, &mut cur)?;
             match tag {
                 0x01 => {
-                    if cur + 8 > bytes.len() { return Err("Erreur float".to_string()); }
-                    let n = f64::from_le_bytes(bytes[cur..cur + 8].try_into().unwrap());
-                    cur += 8;
+                    let n = read_f64(payload, &mut cur)?;
                     constants.push(Value::Number(n));
                 }
                 0x02 => {
-                    if cur + 4 > bytes.len() { return Err("Erreur string len".to_string()); }
-                    let len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    if cur + len > bytes.len() { return Err("Erreur string data".to_string()); }
-                    let s = String::from_utf8_lossy(&bytes[cur..cur + len]).to_string();
-                    cur += len;
+                    let s = read_string(payload, &mut cur)?;
                     constants.push(Value::String(s));
                 }
                 0x03 => {
-                    if cur >= bytes.len() { return Err("Erreur bool".to_string()); }
-                    let b = bytes[cur] != 0;
-                    cur += 1;
+                    let b = read_u8(payload, &mut cur)? != 0;
                     constants.push(Value::Bool(b));
                 }
                 0x04 => {
                     constants.push(Value::Nil);
                 }
                 0x05 => {
-                    if cur + 4 > bytes.len() { return Err("Erreur function name len".to_string()); }
-                    let n_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    if cur + n_len > bytes.len() { return Err("Erreur function name data".to_string()); }
-                    let name = String::from_utf8_lossy(&bytes[cur..cur + n_len]).to_string();
-                    cur += n_len;
-
-                    if cur + 4 > bytes.len() { return Err("Erreur params count".to_string()); }
-                    let p_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
+                    let name = read_string(payload, &mut cur)?;
+                    let p_count = read_u32(payload, &mut cur)? as usize;
                     let mut params = Vec::with_capacity(p_count);
                     for _ in 0..p_count {
-                        if cur + 4 > bytes.len() { return Err("Erreur param string len".to_string()); }
-                        let p_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                        cur += 4;
-                        if cur + p_len > bytes.len() { return Err("Erreur param string data".to_string()); }
-                        let p = String::from_utf8_lossy(&bytes[cur..cur + p_len]).to_string();
-                        cur += p_len;
-                        params.push(p);
+                        params.push(read_string(payload, &mut cur)?);
                     }
-
-                    if cur + 4 > bytes.len() { return Err("Erreur function chunk len".to_string()); }
-                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    if cur + chk_len > bytes.len() { return Err("Erreur function chunk data".to_string()); }
-                    let sub_chunk = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    let chk_len = read_u32(payload, &mut cur)? as usize;
+                    if cur + chk_len > payload.len() {
+                        return Err("Données de fonction tronquées".to_string());
+                    }
+                    let sub_chunk = Chunk::from_bytes(&payload[cur..cur + chk_len])?;
                     cur += chk_len;
 
                     constants.push(Value::Function(Box::new(crate::ast::UserFunction {
@@ -357,24 +412,22 @@ impl Chunk {
                     })));
                 }
                 0x06 => {
-                    if cur + 4 > bytes.len() { return Err("Erreur list count".to_string()); }
-                    let _count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    if cur + 4 > bytes.len() { return Err("Erreur list subchunk len".to_string()); }
-                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    let sub = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    let _count = read_u32(payload, &mut cur)? as usize;
+                    let chk_len = read_u32(payload, &mut cur)? as usize;
+                    if cur + chk_len > payload.len() {
+                        return Err("Données de liste tronquées".to_string());
+                    }
+                    let sub = Chunk::from_bytes(&payload[cur..cur + chk_len])?;
                     cur += chk_len;
                     constants.push(Value::List(std::rc::Rc::new(std::cell::RefCell::new(sub.constants))));
                 }
                 0x07 => {
-                    if cur + 4 > bytes.len() { return Err("Erreur map count".to_string()); }
-                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    if cur + 4 > bytes.len() { return Err("Erreur map subchunk len".to_string()); }
-                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    let sub = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    let count = read_u32(payload, &mut cur)? as usize;
+                    let chk_len = read_u32(payload, &mut cur)? as usize;
+                    if cur + chk_len > payload.len() {
+                        return Err("Données de map tronquées".to_string());
+                    }
+                    let sub = Chunk::from_bytes(&payload[cur..cur + chk_len])?;
                     cur += chk_len;
                     let mut map = std::collections::HashMap::new();
                     for i in 0..count {
@@ -389,59 +442,28 @@ impl Chunk {
         }
 
         // 2. Lire les fichiers sources
-        if cur + 4 > bytes.len() {
-            return Err("Format de bytecode tronqué (files count).".to_string());
-        }
-        let file_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-        cur += 4;
-
+        let file_count = read_u32(payload, &mut cur)? as usize;
         let mut files = Vec::with_capacity(file_count);
         for _ in 0..file_count {
-            if cur + 4 > bytes.len() {
-                return Err("Format de bytecode tronqué (file len).".to_string());
-            }
-            let len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-            cur += 4;
-            if cur + len > bytes.len() {
-                return Err("Format de bytecode tronqué (file name).".to_string());
-            }
-            let f = String::from_utf8_lossy(&bytes[cur..cur + len]).to_string();
-            cur += len;
-            files.push(f);
+            files.push(read_string(payload, &mut cur)?);
         }
 
         // 3. Lire le code
-        if cur + 4 > bytes.len() {
-            return Err("Format de bytecode tronqué (code count).".to_string());
-        }
-        let code_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-        cur += 4;
-
+        let code_count = read_u32(payload, &mut cur)? as usize;
         let mut code = Vec::with_capacity(code_count);
         let mut lines = Vec::with_capacity(code_count);
         let mut file_ids = Vec::with_capacity(code_count);
 
         for _ in 0..code_count {
-            if cur + 9 > bytes.len() {
-                return Err("Format de bytecode tronqué (opcode header).".to_string());
-            }
-            let line = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-            cur += 4;
+            let line = read_u32(payload, &mut cur)? as usize;
             lines.push(line);
 
-            let file_id = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-            cur += 4;
+            let file_id = read_u32(payload, &mut cur)? as usize;
             file_ids.push(file_id);
 
-            let op_tag = bytes[cur];
-            cur += 1;
-
+            let op_tag = read_u8(payload, &mut cur)?;
             let op = match op_tag {
-                1 => {
-                    let idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpConstant(idx)
-                }
+                1 => OpCode::OpConstant(read_u32(payload, &mut cur)? as usize),
                 2 => OpCode::OpNil,
                 3 => OpCode::OpTrue,
                 4 => OpCode::OpFalse,
@@ -459,61 +481,23 @@ impl Chunk {
                 16 => OpCode::OpLess,
                 17 => OpCode::OpLessEqual,
                 18 => OpCode::OpNot,
-                19 => {
-                    let idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpDefineGlobal(idx)
-                }
-                20 => {
-                    let idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpGetGlobal(idx)
-                }
-                21 => {
-                    let idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpSetGlobal(idx)
-                }
-                22 => {
-                    let target = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpJumpIfFalse(target)
-                }
-                23 => {
-                    let target = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpJump(target)
-                }
-                24 => {
-                    let target = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpLoop(target)
-                }
+                19 => OpCode::OpDefineGlobal(read_u32(payload, &mut cur)? as usize),
+                20 => OpCode::OpGetGlobal(read_u32(payload, &mut cur)? as usize),
+                21 => OpCode::OpSetGlobal(read_u32(payload, &mut cur)? as usize),
+                22 => OpCode::OpJumpIfFalse(read_u32(payload, &mut cur)? as usize),
+                23 => OpCode::OpJump(read_u32(payload, &mut cur)? as usize),
+                24 => OpCode::OpLoop(read_u32(payload, &mut cur)? as usize),
                 25 => OpCode::OpPrint,
-                26 => {
-                    let idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpInput(idx)
-                }
+                26 => OpCode::OpInput(read_u32(payload, &mut cur)? as usize),
                 27 => {
-                    let name_idx = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    let argc = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
+                    let name_idx = read_u32(payload, &mut cur)? as usize;
+                    let argc = read_u32(payload, &mut cur)? as usize;
                     OpCode::OpCall(name_idx, argc)
                 }
                 28 => OpCode::OpHalt,
                 29 => OpCode::OpReturn,
-                30 => {
-                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpBuildList(count)
-                }
-                31 => {
-                    let count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
-                    cur += 4;
-                    OpCode::OpBuildMap(count)
-                }
+                30 => OpCode::OpBuildList(read_u32(payload, &mut cur)? as usize),
+                31 => OpCode::OpBuildMap(read_u32(payload, &mut cur)? as usize),
                 32 => OpCode::OpGetIndex,
                 33 => OpCode::OpSetIndex,
                 _ => return Err(format!("Opcode inconnu: {}", op_tag)),
@@ -522,6 +506,84 @@ impl Chunk {
             code.push(op);
         }
 
+        // Validation défensive des indices de fichiers
+        for fid in &file_ids {
+            if *fid >= files.len() {
+                return Err(format!("ID de fichier invalide dans le bytecode: {}", fid));
+            }
+        }
+
         Ok(Chunk { code, constants, lines, file_ids, files })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_adler32_known_vector() {
+        // Vecteur standard Adler-32 pour "123456789" = 0x091E01DE
+        let sum = adler32(b"123456789");
+        assert_eq!(sum, 0x091E01DE);
+    }
+
+    #[test]
+    fn test_chunk_serialization_magic_and_checksum() {
+        let mut chunk = Chunk::new();
+        chunk.add_file("test.klw");
+        let c0 = chunk.add_constant(Value::Number(42.0));
+        chunk.write_op_loc(OpCode::OpConstant(c0), 0, 10);
+        chunk.write_op_loc(OpCode::OpHalt, 0, 11);
+
+        let bytes = chunk.to_bytes();
+        assert!(bytes.len() >= 12);
+        assert_eq!(&bytes[0..8], BYTECODE_MAGIC);
+
+        let restored = Chunk::from_bytes(&bytes).expect("Désérialisation valide");
+        assert_eq!(chunk, restored);
+    }
+
+    #[test]
+    fn test_bytecode_corrupted_header_detection() {
+        // En-tête trop court
+        let short = vec![0u8; 8];
+        assert!(Chunk::from_bytes(&short).is_err());
+
+        // Magic incorrect
+        let mut wrong_magic = vec![0u8; 16];
+        wrong_magic[0..8].copy_from_slice(b"BADMAGIC");
+        assert!(Chunk::from_bytes(&wrong_magic).is_err());
+    }
+
+    #[test]
+    fn test_bytecode_corrupted_checksum_detection() {
+        let mut chunk = Chunk::new();
+        chunk.write_op(OpCode::OpNil, 1);
+        let mut bytes = chunk.to_bytes();
+
+        // Altération d'un octet de payload
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+
+        let res = Chunk::from_bytes(&bytes);
+        assert!(res.is_err());
+        assert!(res.err().unwrap().contains("Adler-32"));
+    }
+
+    #[test]
+    fn test_bytecode_truncated_payload_never_panics() {
+        let mut chunk = Chunk::new();
+        let c = chunk.add_constant(Value::String("Chaîne longue pour test".to_string()));
+        chunk.write_op(OpCode::OpConstant(c), 1);
+        chunk.write_op(OpCode::OpHalt, 2);
+        let bytes = chunk.to_bytes();
+
+        // Tronquer à toutes les longueurs possibles de 0 à len
+        for cut in 0..bytes.len() {
+            let truncated = &bytes[0..cut];
+            let res = Chunk::from_bytes(truncated);
+            assert!(res.is_err(), "Ne doit jamais paniquer à la coupe {}", cut);
+        }
     }
 }

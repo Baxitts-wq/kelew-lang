@@ -25,6 +25,7 @@ pub struct VM {
     globals: HashMap<String, Value>,
     trace_execution: bool,
     frames: Vec<CallFrame>,
+    last_error: Option<String>,
 }
 
 impl VM {
@@ -36,6 +37,7 @@ impl VM {
             globals: HashMap::new(),
             trace_execution: false,
             frames: Vec::new(),
+            last_error: None,
         }
     }
 
@@ -51,11 +53,20 @@ impl VM {
         &mut self.globals
     }
 
+    pub fn get_frames(&self) -> &[CallFrame] {
+        &self.frames
+    }
+
+    pub fn get_last_error(&self) -> Option<&str> {
+        self.last_error.as_deref()
+    }
+
     pub fn interpret(&mut self, chunk: Chunk) -> InterpretResult {
         self.chunk = chunk;
         self.ip = 0;
         self.stack.clear();
         self.frames.clear();
+        self.last_error = None;
 
         let initial_file = self
             .chunk
@@ -342,6 +353,7 @@ impl VM {
                             globals: sub_globals,
                             trace_execution: self.trace_execution,
                             frames: sub_frames,
+                            last_error: None,
                         };
 
                         let status = sub_vm.run();
@@ -354,6 +366,8 @@ impl VM {
                         }
 
                         if status == InterpretResult::RuntimeError {
+                            self.frames = sub_vm.frames;
+                            self.last_error = sub_vm.last_error;
                             return InterpretResult::RuntimeError;
                         }
 
@@ -505,12 +519,19 @@ impl VM {
         }
     }
 
-    fn runtime_error(&self, message: &str) -> InterpretResult {
+    fn runtime_error(&mut self, message: &str) -> InterpretResult {
         let (file, line) = if self.ip > 0 && self.ip - 1 < self.chunk.code.len() {
             self.chunk.get_location(self.ip - 1)
         } else {
             ("<source>", 0)
         };
+
+        if let Some(top) = self.frames.last_mut() {
+            top.file = file.to_string();
+            top.line = line;
+        }
+
+        self.last_error = Some(message.to_string());
 
         eprintln!("[Erreur Runtime VM]");
         eprintln!("  Message: {}", message);

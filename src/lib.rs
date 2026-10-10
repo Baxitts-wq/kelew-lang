@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod bundler;
 pub mod compiler;
 pub mod diagnostic;
 pub mod disassembler;
@@ -10,13 +11,14 @@ pub mod token;
 pub mod vm;
 
 pub use ast::Value;
+pub use bundler::Bundler;
 pub use compiler::Compiler;
 pub use diagnostic::Diagnostic;
 pub use disassembler::Disassembler;
 pub use lexer::Lexer;
-pub use opcode::{Chunk, OpCode};
+pub use opcode::{Chunk, OpCode, BYTECODE_MAGIC, BYTECODE_VERSION, adler32};
 pub use parser::Parser;
-pub use vm::{InterpretResult, VM};
+pub use vm::{CallFrame, InterpretResult, VM};
 
 /// Moteur de scripting embarqué Kelew
 pub struct Engine {
@@ -80,6 +82,16 @@ impl Engine {
             InterpretResult::CompileError => Err("Erreur de compilation du bytecode.".to_string()),
             InterpretResult::RuntimeError => Err("Erreur d'exécution de la machine virtuelle.".to_string()),
         }
+    }
+
+    /// Récupère une référence vers la machine virtuelle sous-jacente
+    pub fn get_vm(&self) -> &VM {
+        &self.vm
+    }
+
+    /// Récupère une référence mutable vers la machine virtuelle sous-jacente
+    pub fn get_vm_mut(&mut self) -> &mut VM {
+        &mut self.vm
     }
 
     /// Récupère la valeur d'une variable globale

@@ -341,3 +341,230 @@ fn test_runtime_call_stack_trace_and_file_localization() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn test_three_level_module_hierarchy_call_stack_and_file_precision() {
+    let dir = create_temp_test_dir("3level");
+
+    let level_c = dir.join("level_c.klw");
+    fs::write(
+        &level_c,
+        r#"
+        khedma leaf_compute(val)
+            Kelew crash = "echec" - val
+            raja3 crash
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let level_b = dir.join("level_b.klw");
+    fs::write(
+        &level_b,
+        r#"
+        Jibou "level_c.klw"
+
+        khedma mid_compute(val)
+            raja3 leaf_compute(val)
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let level_a = dir.join("level_a.klw");
+    let main_code = r#"
+        T3boun dymek
+        Jibou "level_b.klw"
+
+        khedma top_compute(val)
+            raja3 mid_compute(val)
+        Baraka
+
+        top_compute(42)
+        Fio Del puta
+    "#;
+    fs::write(&level_a, main_code).unwrap();
+
+    let mut engine = Engine::with_source_file(dir.clone(), "level_a.klw");
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_err(), "L'exécution doit échouer avec RuntimeError");
+
+    let frames = engine.get_vm().get_frames();
+    assert!(frames.len() >= 4, "La pile doit contenir au moins 4 frames, trouvé: {:?}", frames);
+
+    // Frame 0: <script> dans level_a.klw
+    assert_eq!(frames[0].function_name, "<script>");
+    assert!(frames[0].file.ends_with("level_a.klw"));
+
+    // Frame 1: top_compute() dans level_a.klw
+    assert_eq!(frames[1].function_name, "top_compute");
+    assert!(frames[1].file.ends_with("level_a.klw"));
+
+    // Frame 2: mid_compute() dans level_b.klw
+    assert_eq!(frames[2].function_name, "mid_compute");
+    assert!(frames[2].file.ends_with("level_b.klw"));
+
+    // Frame 3: leaf_compute() dans level_c.klw
+    assert_eq!(frames[3].function_name, "leaf_compute");
+    assert!(frames[3].file.ends_with("level_c.klw"));
+    assert_eq!(frames[3].line, 3);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_deep_recursion_stack_trace_order() {
+    let dir = create_temp_test_dir("recursion_trace");
+
+    let code = r#"
+        T3boun dymek
+        khedma recurse_fail(n)
+            Zaama n <= 0
+                Kelew crash = "texte" - 1
+                raja3 crash
+            Baraka
+            raja3 recurse_fail(n - 1)
+        Baraka
+
+        recurse_fail(4)
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_source_file(dir.clone(), "recurse.klw");
+    let eval_res = engine.eval(code);
+    assert!(eval_res.is_err());
+
+    let frames = engine.get_vm().get_frames();
+    assert!(frames.len() >= 6, "Doit avoir au moins 6 frames, trouvé: {}", frames.len());
+    assert_eq!(frames[0].function_name, "<script>");
+    for i in 1..frames.len() {
+        assert_eq!(frames[i].function_name, "recurse_fail");
+        assert!(frames[i].file.ends_with("recurse.klw"));
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_multi_imported_diamond_error_attribution() {
+    let dir = create_temp_test_dir("diamond_error");
+
+    let base_file = dir.join("base_lib.klw");
+    fs::write(
+        &base_file,
+        r#"
+        khedma risky_base(x)
+            Zaama x < 0
+                Kelew bad = "interdit" - x
+                raja3 bad
+            Baraka
+            raja3 x * 2
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let branch_ok = dir.join("branch_ok.klw");
+    fs::write(
+        &branch_ok,
+        r#"
+        Jibou "base_lib.klw"
+        khedma safe_call()
+            raja3 risky_base(10)
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let branch_bad = dir.join("branch_bad.klw");
+    fs::write(
+        &branch_bad,
+        r#"
+        Jibou "base_lib.klw"
+        khedma fail_call()
+            raja3 risky_base(0 - 5)
+        Baraka
+        "#,
+    )
+    .unwrap();
+
+    let main_code = r#"
+        T3boun dymek
+        Jibou "branch_ok.klw"
+        Jibou "branch_bad.klw"
+
+        Kelew v1 = safe_call()
+        Kelew v2 = fail_call()
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_source_file(dir.clone(), "main.klw");
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_err());
+
+    let frames = engine.get_vm().get_frames();
+    assert!(frames.len() >= 3);
+    let leaf = frames.last().unwrap();
+    assert_eq!(leaf.function_name, "risky_base");
+    assert!(leaf.file.ends_with("base_lib.klw"));
+
+    let caller = &frames[frames.len() - 2];
+    assert_eq!(caller.function_name, "fail_call");
+    assert!(caller.file.ends_with("branch_bad.klw"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_native_stdlib_error_stack_trace() {
+    let dir = create_temp_test_dir("native_err");
+
+    let main_code = r#"
+        T3boun dymek
+        khedma load_config()
+            raja3 LireFichier("fichier_introuvable_xyz_987654.txt")
+        Baraka
+
+        load_config()
+        Fio Del puta
+    "#;
+
+    let mut engine = Engine::with_source_file(dir.clone(), "app.klw");
+    let eval_res = engine.eval(main_code);
+    assert!(eval_res.is_err());
+
+    let frames = engine.get_vm().get_frames();
+    assert!(frames.len() >= 2);
+    assert_eq!(frames[0].function_name, "<script>");
+    assert_eq!(frames[1].function_name, "load_config");
+    assert!(frames[1].file.ends_with("app.klw"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_standalone_bundler_and_magic_header_validation() {
+    let dir = create_temp_test_dir("bundler_magic");
+    let src = dir.join("source.klw");
+    let out = dir.join("bundle.exe");
+
+    fs::write(
+        &src,
+        r#"
+        T3boun dymek
+        Kelew v = 123 + 456
+        Fio Del puta
+        "#,
+    )
+    .unwrap();
+
+    let res = kelew::bundler::Bundler::build_executable(
+        src.to_str().unwrap(),
+        out.to_str().unwrap(),
+    );
+    assert!(res.is_ok(), "La génération du .exe doit réussir: {:?}", res.err());
+    assert!(out.exists(), "Le fichier autonome .exe doit exister");
+    assert!(fs::metadata(&out).unwrap().len() > 1000);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
