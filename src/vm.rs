@@ -286,13 +286,56 @@ impl VM {
                     }
                     args.reverse();
 
-                    match crate::stdlib::StdLib::call(&name, &args) {
-                        Ok(result) => self.push(result),
-                        Err(e) => {
-                            eprintln!("[Erreur Native Kelew] {}", e);
+                    if let Some(Value::Function(user_fn)) = self.globals.get(&name).cloned() {
+                        if args.len() != user_fn.params.len() {
+                            eprintln!(
+                                "[Erreur Runtime VM] Fonction '{}' attend {} arguments, reçu: {}",
+                                name,
+                                user_fn.params.len(),
+                                args.len()
+                            );
                             return InterpretResult::RuntimeError;
                         }
+
+                        let mut sub_globals = self.globals.clone();
+                        for (param, arg) in user_fn.params.iter().zip(args.into_iter()) {
+                            sub_globals.insert(param.clone(), arg);
+                        }
+
+                        let mut sub_vm = VM {
+                            chunk: user_fn.chunk,
+                            ip: 0,
+                            stack: Vec::with_capacity(64),
+                            globals: sub_globals,
+                            trace_execution: self.trace_execution,
+                        };
+
+                        let status = sub_vm.run();
+                        let ret_val = sub_vm.stack.pop().unwrap_or(Value::Nil);
+
+                        for (k, v) in sub_vm.globals {
+                            if !user_fn.params.contains(&k) {
+                                self.globals.insert(k, v);
+                            }
+                        }
+
+                        if status == InterpretResult::RuntimeError {
+                            return InterpretResult::RuntimeError;
+                        }
+
+                        self.push(ret_val);
+                    } else {
+                        match crate::stdlib::StdLib::call(&name, &args) {
+                            Ok(result) => self.push(result),
+                            Err(e) => {
+                                eprintln!("[Erreur Native Kelew] {}", e);
+                                return InterpretResult::RuntimeError;
+                            }
+                        }
                     }
+                }
+                OpCode::OpReturn => {
+                    break;
                 }
                 OpCode::OpHalt => {
                     break;
@@ -321,6 +364,7 @@ impl VM {
             Value::Nil => false,
             Value::Number(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
+            Value::Function(_) => true,
         }
     }
 }

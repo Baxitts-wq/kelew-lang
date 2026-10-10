@@ -116,4 +116,42 @@ mod tests {
 
         assert_eq!(chunk, restored);
     }
+
+    #[test]
+    fn test_user_functions_and_recursion() {
+        let mut engine = Engine::new();
+        let code = r#"
+            T3boun dymek
+            khedma facto(n)
+                Zaama n <= 1
+                    raja3 1
+                Baraka
+                raja3 n * facto(n - 1)
+            Baraka
+
+            Kelew res = facto(5)
+            Fio Del puta
+        "#;
+        assert!(engine.eval(code).is_ok());
+        assert_eq!(engine.get_global("res"), Some(&Value::Number(120.0)));
+    }
+
+    #[test]
+    fn test_json_extraction_and_ai_fallback() {
+        let mut engine = Engine::new();
+        let code = r#"
+            T3boun dymek
+            Kelew json_data = "{\"model\": \"gemini-flash\", \"tokens\": 1024, \"active\": true}"
+            Kelew m = JsonGet(json_data, "model")
+            Kelew tok = JsonGet(json_data, "tokens")
+            Kelew act = JsonGet(json_data, "active")
+            Kelew ai_resp = AskAi("Ping test")
+            Fio Del puta
+        "#;
+        assert!(engine.eval(code).is_ok());
+        assert_eq!(engine.get_global("m"), Some(&Value::String("gemini-flash".to_string())));
+        assert_eq!(engine.get_global("tok"), Some(&Value::Number(1024.0)));
+        assert_eq!(engine.get_global("act"), Some(&Value::Bool(true)));
+        assert!(matches!(engine.get_global("ai_resp"), Some(Value::String(_))));
+    }
 }

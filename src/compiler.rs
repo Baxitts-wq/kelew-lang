@@ -95,6 +95,33 @@ impl Compiler {
                 let loop_end = self.chunk.code.len();
                 self.patch_jump(exit_jump, loop_end);
             }
+            Stmt::Function { name, params, body, span } => {
+                let mut fn_compiler = Compiler::new();
+                for s in body {
+                    fn_compiler.compile_stmt(s)?;
+                }
+                fn_compiler.chunk.write_op(OpCode::OpNil, span.line);
+                fn_compiler.chunk.write_op(OpCode::OpReturn, span.line);
+
+                let user_func = crate::ast::UserFunction {
+                    name: name.clone(),
+                    params: params.clone(),
+                    chunk: fn_compiler.chunk,
+                };
+                let fn_val = Value::Function(Box::new(user_func));
+                let const_idx = self.chunk.add_constant(fn_val);
+                self.chunk.write_op(OpCode::OpConstant(const_idx), span.line);
+                let name_idx = self.chunk.add_constant(Value::String(name.clone()));
+                self.chunk.write_op(OpCode::OpDefineGlobal(name_idx), span.line);
+            }
+            Stmt::Return { value, span } => {
+                if let Some(expr) = value {
+                    self.compile_expr(expr)?;
+                } else {
+                    self.chunk.write_op(OpCode::OpNil, span.line);
+                }
+                self.chunk.write_op(OpCode::OpReturn, span.line);
+            }
             Stmt::ExprStmt { expr, span } => {
                 self.compile_expr(expr)?;
                 self.chunk.write_op(OpCode::OpPop, span.line);
@@ -118,6 +145,10 @@ impl Compiler {
                 }
                 Value::Nil => {
                     self.chunk.write_op(OpCode::OpNil, span.line);
+                }
+                Value::Function(_) => {
+                    let idx = self.chunk.add_constant(val.clone());
+                    self.chunk.write_op(OpCode::OpConstant(idx), span.line);
                 }
             },
             Expr::Variable(name, span) => {

@@ -223,6 +223,8 @@ impl Lexer {
             "khalas" => TokenType::Khalas,
             "dima" => TokenType::Dima,
             "baraka" => TokenType::Baraka,
+            "khedma" | "fn" => TokenType::Khedma,
+            "raja3" | "rejje3" | "return" => TokenType::Raja3,
             "sah" => TokenType::Sah,
             "k7hba" | "k7ba" | "kahba" | "khedba" => TokenType::K7hba,
             _ => TokenType::Identifier(text),

@@ -1,0 +1,50 @@
+T3boun dymek
+
+# ==============================================================================
+# KELEW INTELLIGENT RUNTIME DEMO - BEXY SYSTEMS
+# Demonstration of First-Class Functions, JSON Parsing, and AI Integration
+# ==============================================================================
+
+# 1. First-class recursive function declaration
+khedma fibonacci(n)
+    Zaama n <= 1
+        raja3 n
+    Baraka
+    raja3 fibonacci(n - 1) + fibonacci(n - 2)
+Baraka
+
+khedma saluer_agent(nom, score)
+    Ejacule "Agent enregistre:"
+    Ejacule nom
+    Ejacule "Score d'efficience:"
+    Ejacule score
+    raja3 Sah
+Baraka
+
+# 2. Execution of function logic
+Ejacule "--- Calcul recursif Fibonacci ---"
+Kelew fib_val = fibonacci(7)
+Ejacule "Fibonacci(7) ="
+Ejacule fib_val
+
+Kelew ok = saluer_agent("Bexy Core Engine", fib_val * 10)
+
+# 3. JSON extraction using built-in zero-dependency parser
+Ejacule "--- Traitement JSON zero-dependance ---"
+Kelew payload = "{\"status\": \"operational\", \"version\": 1.0, \"service\": \"Bexy Intelligence\"}"
+Kelew service_name = JsonGet(payload, "service")
+Kelew statut = JsonGet(payload, "status")
+
+Ejacule "Service:"
+Ejacule service_name
+Ejacule "Statut:"
+Ejacule statut
+
+# 4. Built-in AI capability (AskAi)
+Ejacule "--- Integration Intelligence Artificielle ---"
+Kelew question = "Resumer la performance du moteur Kelew VM"
+Kelew reponse_ia = AskAi(question)
+Ejacule "Reponse du moteur d'inference:"
+Ejacule reponse_ia
+
+Fio Del puta

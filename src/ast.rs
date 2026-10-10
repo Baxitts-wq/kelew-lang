@@ -1,11 +1,19 @@
 use crate::token::Span;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct UserFunction {
+    pub name: String,
+    pub params: Vec<String>,
+    pub chunk: crate::opcode::Chunk,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(f64),
     String(String),
     Bool(bool),
     Nil,
+    Function(Box<UserFunction>),
 }
 
 impl std::fmt::Display for Value {
@@ -21,6 +29,7 @@ impl std::fmt::Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", if *b { "Sah (vrai)" } else { "K7hba (faux)" }),
             Value::Nil => write!(f, "Walou (nil)"),
+            Value::Function(f_val) => write!(f, "<khedma {}({})>", f_val.name, f_val.params.join(", ")),
         }
     }
 }
@@ -104,6 +113,16 @@ pub enum Stmt {
     While {
         condition: Expr,
         body: Vec<Stmt>,
+        span: Span,
+    },
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+        span: Span,
+    },
+    Return {
+        value: Option<Expr>,
         span: Span,
     },
     ExprStmt {

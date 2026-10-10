@@ -41,6 +41,7 @@ pub enum OpCode {
     OpInput(usize),
     OpCall(usize, usize), // (name_idx, arg_count)
 
+    OpReturn,
     // Fin d'exécution
     OpHalt,
 }
@@ -105,6 +106,23 @@ impl Chunk {
                 }
                 Value::Nil => {
                     buf.push(0x04);
+                }
+                Value::Function(f_val) => {
+                    buf.push(0x05);
+                    let name_bytes = f_val.name.as_bytes();
+                    buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(name_bytes);
+
+                    buf.extend_from_slice(&(f_val.params.len() as u32).to_le_bytes());
+                    for p in &f_val.params {
+                        let p_bytes = p.as_bytes();
+                        buf.extend_from_slice(&(p_bytes.len() as u32).to_le_bytes());
+                        buf.extend_from_slice(p_bytes);
+                    }
+
+                    let chunk_bytes = f_val.chunk.to_bytes();
+                    buf.extend_from_slice(&(chunk_bytes.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(&chunk_bytes);
                 }
             }
         }
@@ -174,6 +192,7 @@ impl Chunk {
                     buf.extend_from_slice(&(*argc as u32).to_le_bytes());
                 }
                 OpCode::OpHalt => buf.push(28),
+                OpCode::OpReturn => buf.push(29),
             }
         }
 
@@ -222,6 +241,41 @@ impl Chunk {
                 }
                 0x04 => {
                     constants.push(Value::Nil);
+                }
+                0x05 => {
+                    if cur + 4 > bytes.len() { return Err("Erreur function name len".to_string()); }
+                    let n_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    if cur + n_len > bytes.len() { return Err("Erreur function name data".to_string()); }
+                    let name = String::from_utf8_lossy(&bytes[cur..cur + n_len]).to_string();
+                    cur += n_len;
+
+                    if cur + 4 > bytes.len() { return Err("Erreur params count".to_string()); }
+                    let p_count = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    let mut params = Vec::with_capacity(p_count);
+                    for _ in 0..p_count {
+                        if cur + 4 > bytes.len() { return Err("Erreur param string len".to_string()); }
+                        let p_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                        cur += 4;
+                        if cur + p_len > bytes.len() { return Err("Erreur param string data".to_string()); }
+                        let p = String::from_utf8_lossy(&bytes[cur..cur + p_len]).to_string();
+                        cur += p_len;
+                        params.push(p);
+                    }
+
+                    if cur + 4 > bytes.len() { return Err("Erreur function chunk len".to_string()); }
+                    let chk_len = u32::from_le_bytes(bytes[cur..cur + 4].try_into().unwrap()) as usize;
+                    cur += 4;
+                    if cur + chk_len > bytes.len() { return Err("Erreur function chunk data".to_string()); }
+                    let sub_chunk = Chunk::from_bytes(&bytes[cur..cur + chk_len])?;
+                    cur += chk_len;
+
+                    constants.push(Value::Function(Box::new(crate::ast::UserFunction {
+                        name,
+                        params,
+                        chunk: sub_chunk,
+                    })));
                 }
                 _ => return Err(format!("Tag de constante inconnu: 0x{:02X}", tag)),
             }
@@ -315,6 +369,7 @@ impl Chunk {
                     OpCode::OpCall(name_idx, argc)
                 }
                 28 => OpCode::OpHalt,
+                29 => OpCode::OpReturn,
                 _ => return Err(format!("Opcode inconnu: {}", op_tag)),
             };
 

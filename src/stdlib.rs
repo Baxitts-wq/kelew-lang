@@ -126,8 +126,119 @@ impl StdLib {
                 }
             }
 
+            // ==================== INTELLIGENCE ARTIFICIELLE & JSON ====================
+            "askai" | "demanderia" | "ia" => {
+                let prompt = Self::expect_string(args, 0, "AskAi(prompt)")?;
+                let api_key = std::env::var("GEMINI_API_KEY").or_else(|_| std::env::var("AI_API_KEY")).unwrap_or_default();
+
+                if api_key.is_empty() {
+                    let fallback = format!("[Bexy IA Runtime] Analyse heuristique (mode hors-ligne): Résultat pour '{}'", prompt);
+                    return Ok(Value::String(fallback));
+                }
+
+                let url = format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={}",
+                    api_key
+                );
+                let escaped_prompt = Self::escape_json_str(&prompt);
+                let body = format!(
+                    "{{\"contents\":[{{\"parts\":[{{\"text\":\"{}\"}}]}}]}}",
+                    escaped_prompt
+                );
+
+                let output = Command::new("curl.exe")
+                    .arg("-s")
+                    .arg("-L")
+                    .arg("-X")
+                    .arg("POST")
+                    .arg("-H")
+                    .arg("Content-Type: application/json")
+                    .arg("-d")
+                    .arg(&body)
+                    .arg("--max-time")
+                    .arg("15")
+                    .arg(&url)
+                    .output();
+
+                match output {
+                    Ok(out) => {
+                        let text = String::from_utf8_lossy(&out.stdout).to_string();
+                        if let Some(extracted) = Self::extract_json_field(&text, "text") {
+                            Ok(extracted)
+                        } else {
+                            Ok(Value::String(text))
+                        }
+                    }
+                    Err(e) => Err(format!("Erreur appel IA: {}", e)),
+                }
+            }
+
+            "jsonget" | "extrairejson" => {
+                let json_str = Self::expect_string(args, 0, "JsonGet(chaine_json, cle)")?;
+                let key = Self::expect_string(args, 1, "JsonGet(chaine_json, cle)")?;
+                Ok(Self::extract_json_field(&json_str, &key).unwrap_or(Value::Nil))
+            }
+
             _ => Err(format!("Fonction native inconnue: '{}'", name)),
         }
+    }
+
+    pub fn extract_json_field(json: &str, target_key: &str) -> Option<Value> {
+        let pattern = format!("\"{}\"", target_key);
+        let key_idx = json.find(&pattern)?;
+        let after_key = &json[key_idx + pattern.len()..];
+        
+        let colon_idx = after_key.find(':')?;
+        let after_colon = after_key[colon_idx + 1..].trim_start();
+
+        if after_colon.starts_with('"') {
+            let mut escaped = false;
+            let mut end_idx = None;
+            for (i, c) in after_colon[1..].char_indices() {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == '"' {
+                    end_idx = Some(i + 1);
+                    break;
+                }
+            }
+            let end = end_idx?;
+            let raw_str = &after_colon[1..end];
+            Some(Value::String(Self::unescape_json_str(raw_str)))
+        } else if after_colon.starts_with("true") {
+            Some(Value::Bool(true))
+        } else if after_colon.starts_with("false") {
+            Some(Value::Bool(false))
+        } else if after_colon.starts_with("null") {
+            Some(Value::Nil)
+        } else {
+            let end = after_colon.find(|c: char| c == ',' || c == '}' || c == ']' || c.is_whitespace())
+                .unwrap_or(after_colon.len());
+            let num_str = &after_colon[..end];
+            if let Ok(n) = num_str.parse::<f64>() {
+                Some(Value::Number(n))
+            } else {
+                Some(Value::String(num_str.to_string()))
+            }
+        }
+    }
+
+    fn escape_json_str(s: &str) -> String {
+        s.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+            .replace('\t', "\\t")
+    }
+
+    fn unescape_json_str(s: &str) -> String {
+        s.replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
     }
 
     fn expect_string(args: &[Value], idx: usize, signature: &str) -> Result<String, String> {

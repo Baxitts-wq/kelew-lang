@@ -1,8 +1,30 @@
-# Kelew
+<p align="center">
+  <img src="assets/logo.png" alt="Bexy Systems Logo" width="180" />
+</p>
 
-Kelew is a stack-based bytecode virtual machine, standalone native binary compiler, and embeddable scripting engine implemented in pure Rust with zero external dependencies.
+<h1 align="center">Kelew Language Engine</h1>
 
-It features a multi-pass pipeline: lexical analysis with source location tracking, recursive-descent parsing into a typed abstract syntax tree (AST), bytecode compilation with constant deduplication and relative jump patching, and execution on a stack machine runtime.
+<p align="center">
+  <strong>Stack-based bytecode virtual machine, native compiler, and zero-dependency intelligence runtime engineered by Bexy.</strong>
+</p>
+
+<p align="center">
+  <a href="#architecture">Architecture</a> &bull;
+  <a href="#language-specification">Language Specification</a> &bull;
+  <a href="#first-class-functions">Functions</a> &bull;
+  <a href="#intelligence-and-standard-library">Intelligence & StdLib</a> &bull;
+  <a href="#standalone-binary-bundler">Native Bundler</a> &bull;
+  <a href="#embedding-api">Embedding API</a> &bull;
+  <a href="#benchmarking-and-tests">Tests</a>
+</p>
+
+---
+
+## Overview
+
+Kelew is a compiled, stack-oriented programming language and virtual machine implemented in pure Rust with zero external dependencies. It combines lexical analysis with line/column tracking, recursive-descent parsing into a strongly typed AST, bytecode compilation with constant deduplication and relative jump patching, and execution on a register-free stack runtime.
+
+Kelew is engineered for systems automation, embeddable application scripting, and sovereign standalone distribution.
 
 ## Architecture
 
@@ -35,7 +57,7 @@ It features a multi-pass pipeline: lexical analysis with source location trackin
                 +---------------+---------------+
                 |                               |
                 v                               v
-    [4. Stack-Based VM Engine]       [5. Native PE/ELF Bundler]
+    [4. Stack-Based VM Engine]       [5. Native PE Bundler]
                 |                               |
                 v                               v
          Runtime Execution           Standalone Executable (.exe)
@@ -49,37 +71,86 @@ It features a multi-pass pipeline: lexical analysis with source location trackin
 | :--- | :--- | :--- |
 | `T3boun dymek` | `program_start` | Block initialization delimiter |
 | `Fio Del puta` | `program_end` | Execution termination delimiter |
-| `Kelew` | `let` / `var` | Variable declaration and reassignment |
+| `Kelew` | `let` / `var` | Variable declaration and binding |
+| `khedma` | `fn` / `function` | First-class function declaration |
+| `raja3` | `return` | Function return statement |
 | `Ejacule` | `print` | Standard output writer (`stdout`) |
-| `Jib` / `Chouf` | `input` | Interactive standard input reader (`stdin`) |
+| `Jib` / `Chouf` | `input` | Standard input reader (`stdin`) |
 | `Zaama` | `if` | Conditional branch entry |
-| `Walou` | `else` | Alternative branch |
-| `Khalas` | `endif` | Conditional branch terminator |
+| `Walou` | `else` | Alternative conditional branch |
+| `Khalas` / `Baraka` | `endif` / `end` | Block terminator (functions, conditions, loops) |
 | `Dima` | `while` | Loop entry |
-| `Baraka` | `endwhile` | Loop terminator |
 | `Sah` | `true` | Boolean true |
 | `K7hba` | `false` | Boolean false |
 
-### Built-in Standard Library
+### First-Class Functions
 
-Kelew includes a zero-dependency standard library for file operations, networking, and system calls:
+Kelew supports function declarations with lexical parameter binding, recursion, and return values:
+
+```kelew
+T3boun dymek
+
+# Recursive factorial function
+khedma factorielle(n)
+    Zaama n <= 1
+        raja3 1
+    Baraka
+    raja3 n * factorielle(n - 1)
+Baraka
+
+Kelew resultat = factorielle(5)
+Ejacule resultat   # Output: 120
+
+Fio Del puta
+```
+
+## Intelligence and Standard Library
+
+Kelew provides a standard library built without external crates:
+
+### AI and Data Extraction
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `AskAi` | `AskAi(prompt)` | Queries LLM inference via native transport (uses `GEMINI_API_KEY` with deterministic offline fallback) |
+| `JsonGet` | `JsonGet(json_str, key)` | Zero-dependency high-throughput JSON key extractor |
+
+### System and File Operations
 
 | Function | Signature | Description |
 | :--- | :--- | :--- |
 | `LireFichier` | `LireFichier(path)` | Reads complete file content as string |
-| `EcrireFichier` | `EcrireFichier(path, content)` | Writes string data to file |
+| `EcrireFichier` | `EcrireFichier(path, content)` | Writes string data to disk |
 | `FichierExiste` | `FichierExiste(path)` | Returns `Sah` (true) if file exists, else `K7hba` |
-| `SupprimerFichier` | `SupprimerFichier(path)` | Deletes target file |
-| `HttpGet` | `HttpGet(url)` | Performs HTTP/HTTPS GET request via native system transport |
+| `SupprimerFichier` | `SupprimerFichier(path)` | Deletes target file from disk |
+| `HttpGet` | `HttpGet(url)` | Performs HTTP/HTTPS GET request |
 | `HttpPost` | `HttpPost(url, body)` | Performs HTTP/HTTPS POST request |
 | `TempsMs` | `TempsMs()` | Returns current Unix epoch timestamp in milliseconds |
 | `Dormir` | `Dormir(ms)` | Suspends thread execution for specified milliseconds |
 | `LireEnv` | `LireEnv(key)` | Reads system environment variable |
-| `Longueur` | `Longueur(str)` | Returns byte length of string |
+| `Longueur` | `Longueur(str)` | Returns string length |
+
+### AI Workflow Example
+
+```kelew
+T3boun dymek
+
+# 1. Parse JSON payload without external dependencies
+Kelew payload = "{\"status\": \"active\", \"version\": 1.0, \"cluster\": \"bexy-node-1\"}"
+Kelew cluster = JsonGet(payload, "cluster")
+Ejacule cluster
+
+# 2. Query intelligence engine
+Kelew prompt = "Analyser les metriques de performance du cluster"
+Kelew analyse = AskAi(prompt)
+Ejacule analyse
+
+Fio Del puta
+```
 
 ## Virtual Machine Instruction Set
 
-The bytecode compiler emits fixed-width instructions stored inside contiguous chunks:
+The bytecode compiler emits fixed-width opcodes stored in contiguous chunks:
 
 - `OP_CONSTANT <idx>`: Push value from constant pool to evaluation stack.
 - `OP_DEFINE_GLOBAL <idx>`: Bind identifier from constant pool to global register.
@@ -90,28 +161,29 @@ The bytecode compiler emits fixed-width instructions stored inside contiguous ch
 - `OP_JUMP_IF_FALSE <offset>`: Conditional forward jump if stack top is falsy.
 - `OP_JUMP <offset>`: Unconditional forward jump.
 - `OP_LOOP <offset>`: Unconditional backward jump for loop iterations.
-- `OP_CALL <name_idx> <argc>`: Execute native runtime standard library function.
+- `OP_CALL <name_idx> <argc>`: Execute user-defined function or native standard library primitive.
+- `OP_RETURN`: Return from function scope, preserving evaluated return value.
 - `OP_PRINT`: Pop stack top and write to standard output.
 - `OP_INPUT <idx>`: Read input from standard input and assign to global variable.
-- `OP_HALT`: Stop virtual machine evaluation.
+- `OP_HALT`: Terminate virtual machine evaluation.
 
-## Standalone Binary Compilation (Native Bundler)
+## Standalone Binary Bundler
 
-Kelew can package any `.klw` script into a standalone native executable (`.exe` on Windows):
+Kelew compiles any `.klw` source into a self-executing standalone native executable (`.exe` on Windows):
 
 ```bash
-cargo run --release -- build examples/benchmark.klw -o app.exe
+cargo run --release -- build examples/intelligent_ai.klw -o app.exe
 ```
 
-The resulting `app.exe` contains the embedded bytecode chunk and self-executing stack runtime. It runs autonomously with zero dependencies, requiring neither Rust nor an external interpreter.
+The resulting `app.exe` embeds the compiled bytecode directly within the binary trailer and executes in under 1ms with zero runtime dependencies.
 
 ```bash
 ./app.exe
 ```
 
-## Embedding Kelew in Rust Applications
+## Embedding API
 
-Kelew exposes a public embedding engine API (`kelew::Engine`):
+Kelew provides an embeddable Rust interface (`kelew::Engine`):
 
 ```rust
 use kelew::Engine;
@@ -119,76 +191,47 @@ use kelew::Engine;
 fn main() {
     let mut engine = Engine::new();
     
-    // Execute arbitrary Kelew script
     let code = r#"
         T3boun dymek
-        Kelew total = 10 * 5
+        khedma calcul(x)
+            raja3 x * 2 + 10
+        Baraka
+        Kelew res = calcul(16)
         Fio Del puta
     "#;
-    engine.eval(code).unwrap();
     
-    // Inspect global VM state directly from Rust
-    if let Some(val) = engine.get_global("total") {
-        println!("Computed value from VM: {}", val);
+    engine.eval(code).expect("Execution failed");
+    
+    if let Some(val) = engine.get_global("res") {
+        println!("Value computed by Kelew VM: {}", val);
     }
 }
 ```
 
 ## CLI Usage
 
-### Running a script
+### Running a Script
 
 ```bash
-cargo run --release -- run examples/benchmark.klw
+cargo run --release -- run examples/intelligent_ai.klw
 ```
 
 With real-time stack tracing:
 
 ```bash
-cargo run --release -- run examples/benchmark.klw --trace
+cargo run --release -- run examples/intelligent_ai.klw --trace
 ```
 
-### Disassembling bytecode
+### Bytecode Disassembly
 
 ```bash
-cargo run --release -- disasm examples/benchmark.klw
-```
-
-Example output:
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  KELEW BYTECODE DISASSEMBLY : examples/benchmark.klw         │
-└──────────────────────────────────────────────────────────────┘
-OFFSET LIGNE  OPCODE             OPERANDES / DETAILS     
------- ------ ------------------ ------------------------
-0000     9    OP_CONSTANT        #0    (100)
-0001     |    OP_DEFINE_GLOBAL   #1    (base)
-0002    10    OP_CONSTANT        #2    (5)
-0003     |    OP_DEFINE_GLOBAL   #3    (multiplicateur)
-0004    11    OP_CONSTANT        #4    (2)
-0005     |    OP_DEFINE_GLOBAL   #5    (dividende)
-0006    12    OP_GET_GLOBAL      #1    (base)
-0007     |    OP_GET_GLOBAL      #3    (multiplicateur)
-0008     |    OP_MULTIPLY        (*)
-0009     |    OP_GET_GLOBAL      #5    (dividende)
-000A     |    OP_DIVIDE          (/)
-000B     |    OP_DEFINE_GLOBAL   #6    (score)
-0012    19    OP_GET_GLOBAL      #6    (score)
-0013     |    OP_CONSTANT        #9    (200)
-0014     |    OP_GREATER_EQUAL   (>=)
-0015     |    OP_JUMP_IF_FALSE   -> 0019
-0027    34    OP_GET_GLOBAL      #15   (compteur)
-0029     |    OP_GREATER         (>)
-002A     |    OP_JUMP_IF_FALSE   -> 0034
-0033    34    OP_LOOP            -> 0027 (retour)
-0036     0    OP_HALT            (Baraka/FioDelPuta)
+cargo run --release -- disasm examples/intelligent_ai.klw
 ```
 
 ### Static Analysis
 
 ```bash
-cargo run --release -- check examples/benchmark.klw
+cargo run --release -- check examples/intelligent_ai.klw
 ```
 
 ### Interactive REPL
@@ -197,11 +240,17 @@ cargo run --release -- check examples/benchmark.klw
 cargo run --release -- repl
 ```
 
-## Testing
+## Benchmarking and Tests
+
+Run the test suite:
 
 ```bash
 cargo test
 ```
+
+## Organization
+
+Engineered and maintained by **Bexy Systems**.
 
 ## License
 

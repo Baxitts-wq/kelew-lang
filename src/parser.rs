@@ -32,7 +32,11 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, String> {
-        if self.match_token(&[TokenType::Kelew]) {
+        if self.match_token(&[TokenType::Khedma]) {
+            self.function_declaration()
+        } else if self.match_token(&[TokenType::Raja3]) {
+            self.return_statement()
+        } else if self.match_token(&[TokenType::Kelew]) {
             self.var_declaration()
         } else if self.match_token(&[TokenType::Ejacule]) {
             self.print_statement()
@@ -45,6 +49,58 @@ impl Parser {
         } else {
             self.expression_statement()
         }
+    }
+
+    fn function_declaration(&mut self) -> Result<Stmt, String> {
+        let span = self.previous().span;
+        let name = match self.peek().token_type.clone() {
+            TokenType::Identifier(id) => {
+                self.advance();
+                id
+            }
+            _ => return Err(format!("Nom de fonction attendu après 'Khedma' à la ligne {}", span.line)),
+        };
+
+        self.consume(&TokenType::LeftParen, "Parenthèse ouvrante '(' attendue après le nom de fonction")?;
+        let mut params = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                match self.peek().token_type.clone() {
+                    TokenType::Identifier(param) => {
+                        self.advance();
+                        params.push(param);
+                    }
+                    _ => return Err("Nom de paramètre attendu".to_string()),
+                }
+                if !self.match_token(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(&TokenType::RightParen, "Parenthèse fermante ')' attendue après les paramètres")?;
+
+        let mut body = Vec::new();
+        while !self.is_at_end() && !self.check(&TokenType::Khalas) && !self.check(&TokenType::Baraka) {
+            body.push(self.statement()?);
+        }
+
+        if self.match_token(&[TokenType::Khalas, TokenType::Baraka]) {
+            // Clôture
+        } else {
+            return Err("Mot-clé 'Khalas' ou 'Baraka' attendu pour fermer la fonction".to_string());
+        }
+
+        Ok(Stmt::Function { name, params, body, span })
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt, String> {
+        let span = self.previous().span;
+        let value = if !self.check(&TokenType::Khalas) && !self.check(&TokenType::Baraka) && !self.check(&TokenType::FioDelPuta) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        Ok(Stmt::Return { value, span })
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, String> {
@@ -107,19 +163,21 @@ impl Parser {
         let mut then_branch = Vec::new();
         let mut else_branch = None;
 
-        while !self.is_at_end() && !self.check(&TokenType::Walou) && !self.check(&TokenType::Khalas) {
+        while !self.is_at_end() && !self.check(&TokenType::Walou) && !self.check(&TokenType::Khalas) && !self.check(&TokenType::Baraka) {
             then_branch.push(self.statement()?);
         }
 
         if self.match_token(&[TokenType::Walou]) {
             let mut else_stmts = Vec::new();
-            while !self.is_at_end() && !self.check(&TokenType::Khalas) {
+            while !self.is_at_end() && !self.check(&TokenType::Khalas) && !self.check(&TokenType::Baraka) {
                 else_stmts.push(self.statement()?);
             }
             else_branch = Some(else_stmts);
         }
 
-        self.consume(&TokenType::Khalas, "Mot-clé 'Khalas' attendu pour fermer la condition 'Zaama'")?;
+        if !self.match_token(&[TokenType::Khalas, TokenType::Baraka]) {
+            return Err("Mot-clé 'Khalas' ou 'Baraka' attendu pour fermer la condition 'Zaama'".to_string());
+        }
 
         Ok(Stmt::If {
             condition,
@@ -134,11 +192,13 @@ impl Parser {
         let condition = self.expression()?;
         let mut body = Vec::new();
 
-        while !self.is_at_end() && !self.check(&TokenType::Baraka) {
+        while !self.is_at_end() && !self.check(&TokenType::Khalas) && !self.check(&TokenType::Baraka) {
             body.push(self.statement()?);
         }
 
-        self.consume(&TokenType::Baraka, "Mot-clé 'Baraka' attendu pour fermer la boucle 'Dima'")?;
+        if !self.match_token(&[TokenType::Khalas, TokenType::Baraka]) {
+            return Err("Mot-clé 'Khalas' ou 'Baraka' attendu pour fermer la boucle 'Dima'".to_string());
+        }
 
         Ok(Stmt::While {
             condition,

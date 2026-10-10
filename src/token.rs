@@ -23,6 +23,8 @@ pub enum TokenType {
     Khalas,          // Fin de condition (EndIf)
     Dima,            // Boucle Tant Que (While)
     Baraka,          // Fin de boucle (EndWhile)
+    Khedma,          // Déclaration de fonction (khedma / fn)
+    Raja3,           // Valeur de retour (raja3 / return)
     Sah,             // Booléen True (Vrai)
     K7hba,           // Booléen False (Faux)
 
